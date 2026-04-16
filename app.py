@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 FORMULA FINDER v3.0 — Complete App
-Livelli 3+4+5+6: Adam + API REST + Web UI + Dashboard
+Upload fix v3: button-only trigger, no double-click conflict
 """
-import numpy as np, pandas as pd, json, base64, io, warnings, os
+import numpy as np, pandas as pd, base64, io, warnings
 warnings.filterwarnings("ignore")
 
 class Adam:
@@ -48,7 +48,7 @@ class EMLAdamRegressor:
         ss_r=np.sum((y-yp)**2); ss_t=np.sum((y-np.mean(y))**2)
         return float(1-ss_r/ss_t) if ss_t>0 else 1.0
     def formula(self,thr=0.05):
-        terms=[]; 
+        terms=[]
         for n,w in zip(self.names,self.w):
             if abs(w)>thr: terms.append(f"{w:+.3f}" if n=="1" else f"{w:+.3f}*{n}")
         return "y = "+" ".join(terms).lstrip("+").strip() if terms else "y = 0"
@@ -59,13 +59,15 @@ class EMLAdamRegressor:
 def quick_search(X_dict,y,top_n=8,min_r2=0.5):
     ops={}
     for v,x in X_dict.items():
-        x=np.asarray(x,float); xc=np.clip(x,-500,500); xp=np.where(x>0,x,1e-10)
-        ops[f"exp({v})"]=lambda d,v=v: np.exp(np.clip(d[v],-500,500))
-        ops[f"ln({v})"]=lambda d,v=v: np.log(np.where(d[v]>0,d[v],1e-10))
-        ops[f"{v}^2"]=lambda d,v=v: d[v]**2; ops[f"{v}^3"]=lambda d,v=v: d[v]**3
-        ops[f"sqrt({v})"]=lambda d,v=v: np.sqrt(np.abs(d[v]))
-        ops[f"sin({v})"]=lambda d,v=v: np.sin(d[v]); ops[f"cos({v})"]=lambda d,v=v: np.cos(d[v])
-        ops[v]=lambda d,v=v: d[v]; ops[f"eml({v},1)"]=lambda d,v=v: eml(d[v],np.ones(len(d[v])))
+        ops[f"exp({v})"]  = lambda d,v=v: np.exp(np.clip(d[v],-500,500))
+        ops[f"ln({v})"]   = lambda d,v=v: np.log(np.where(d[v]>0,d[v],1e-10))
+        ops[f"{v}^2"]     = lambda d,v=v: d[v]**2
+        ops[f"{v}^3"]     = lambda d,v=v: d[v]**3
+        ops[f"sqrt({v})"] = lambda d,v=v: np.sqrt(np.abs(d[v]))
+        ops[f"sin({v})"]  = lambda d,v=v: np.sin(d[v])
+        ops[f"cos({v})"]  = lambda d,v=v: np.cos(d[v])
+        ops[v]            = lambda d,v=v: d[v]
+        ops[f"eml({v},1)"]= lambda d,v=v: eml(d[v],np.ones(len(d[v])))
     vlist=list(X_dict.keys())
     for i in range(len(vlist)):
         for j in range(i+1,len(vlist)):
@@ -92,6 +94,26 @@ def make_chart_b64(X_dict,y_true,model=None):
     try:
         import matplotlib; matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+import cycler
+
+# Enable grid and update its appearance
+plt.rcParams.update({'axes.grid': True})
+plt.rcParams.update({'grid.color': 'silver'})
+plt.rcParams.update({'grid.linestyle': '--'})
+
+# Set figure resolution
+plt.rcParams.update({'figure.dpi': 150})
+
+# Hide the top and right spines
+plt.rcParams.update({'axes.spines.top': False})
+plt.rcParams.update({'axes.spines.right': False})
+
+# Increase font sizes
+plt.rcParams.update({'font.size': 12})  # General font size
+plt.rcParams.update({'axes.titlesize': 14})  # Title font size
+plt.rcParams.update({'axes.labelsize': 12})  # Axis label font size
+
+plt.rcParams.update({'axes.prop_cycle': cycler.cycler('color', ['#000000'])})
         fig,axes=plt.subplots(1,2,figsize=(12,4)); fig.patch.set_facecolor("#0D1B2A")
         vlist=list(X_dict.keys()); x_vals=np.asarray(X_dict[vlist[0]],float); y_true=np.asarray(y_true,float)
         idx=np.argsort(x_vals); xs,ys=x_vals[idx],y_true[idx]
@@ -99,7 +121,7 @@ def make_chart_b64(X_dict,y_true,model=None):
         ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
         if model:
             yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_true)
-            ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label=f"Fit  R²={r2:.4f}",zorder=4)
+            ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label=f"Fit  R2={r2:.4f}",zorder=4)
         ax.set_title("Data vs Fit",color="white",fontsize=11); ax.tick_params(colors="#888")
         ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
         for s in ax.spines.values(): s.set_edgecolor("#333355")
@@ -127,18 +149,17 @@ header{background:var(--mid);border-bottom:2px solid var(--teal);padding:18px 32
 header h1{font-size:1.6rem;letter-spacing:3px}
 header span{font-size:.75rem;color:var(--neon);border:1px solid var(--neon);border-radius:20px;padding:3px 12px}
 .container{max-width:1100px;margin:0 auto;padding:32px 24px}
-.upload-zone{border:2px dashed var(--teal);border-radius:12px;padding:48px;text-align:center;cursor:pointer;background:var(--card);margin-bottom:28px;transition:.2s}
-.upload-zone:hover,.upload-zone.dragover{border-color:var(--neon);background:#1a2f4a}
+.upload-zone{border:2px dashed var(--teal);border-radius:12px;padding:48px;text-align:center;background:var(--card);margin-bottom:28px;transition:.2s}
+.upload-zone.dragover{border-color:var(--neon);background:#1a2f4a}
 .upload-zone h2{color:var(--teal);margin-bottom:8px}
 .upload-zone p{color:var(--silver);font-size:.9rem}
-.upload-zone input[type=file]{display:none}
-.upload-btn{display:inline-block;margin-top:18px;background:var(--teal);color:var(--bg);border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-weight:700}
+.upload-btn{display:inline-block;margin-top:18px;background:var(--teal);color:var(--bg);border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem}
 .upload-btn:hover{background:var(--neon)}
 .col-select{display:none;background:var(--card);border-radius:12px;padding:24px;margin-bottom:24px;border:1px solid var(--teal)}
 .col-select h3{color:var(--teal);margin-bottom:16px;letter-spacing:1px}
 .col-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
 label{color:var(--silver);font-size:.85rem;display:block;margin-bottom:4px}
-select,input[type=text]{background:var(--mid);color:var(--white);border:1px solid var(--teal);border-radius:6px;padding:8px 12px;font-size:.9rem}
+select{background:var(--mid);color:var(--white);border:1px solid var(--teal);border-radius:6px;padding:8px 12px;font-size:.9rem}
 .run-btn{background:var(--neon);color:var(--bg);border:none;padding:12px 36px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:12px;letter-spacing:1px}
 .run-btn:hover{background:var(--teal);color:#fff}
 .run-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -173,75 +194,127 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
 <div class="container">
 <div class="upload-zone" id="dropZone">
   <h2>Drop your CSV file here</h2>
-  <p>or click to browse your files</p>
-  <label for="fi" class="upload-btn" style="cursor:pointer;display:inline-block;margin-top:18px;">Choose File</label>
+  <p>or click the button below to browse</p>
   <input type="file" id="fi" accept=".csv" style="display:none">
+  <button type="button" class="upload-btn" id="chooseBtn">Choose File</button>
   <p id="fn" style="margin-top:12px;color:var(--neon);font-weight:600"></p>
 </div>
 <div class="col-select" id="colSel">
   <h3>CONFIGURE COLUMNS</h3>
   <div class="col-row">
     <div><label>Target (Y)</label><select id="yCol"></select></div>
-    <div><label>Variables (X) — hold Ctrl for multiple</label><select id="xCols" multiple style="height:90px"></select></div>
+    <div><label>Variables (X) &mdash; hold Ctrl for multiple</label><select id="xCols" multiple style="height:90px"></select></div>
     <div><label>Method</label><select id="method"><option value="both">Both (Quick + Adam)</option><option value="quick">Quick only</option><option value="adam">Adam only</option></select></div>
   </div>
-  <button class="run-btn" id="runBtn" onclick="run()">FIND FORMULA</button>
+  <button type="button" class="run-btn" id="runBtn" onclick="run()">FIND FORMULA</button>
 </div>
 <div class="spinner" id="spin">Searching for the formula... please wait</div>
 <div class="error-box" id="err" style="display:none"></div>
 <div class="results" id="res">
   <div class="best-box"><h2>BEST FORMULA FOUND</h2><div class="best-formula" id="bf"></div><div class="best-r2" id="br"></div></div>
-  <div class="chart-box"><h3>DASHBOARD — Data vs Fit &amp; Residuals</h3><img id="ci" src="" alt="chart"></div>
+  <div class="chart-box"><h3>DASHBOARD &mdash; Data vs Fit &amp; Residuals</h3><img id="ci" src="" alt="chart"></div>
   <div class="terms-box"><h3>TOP CONTRIBUTING TERMS (Adam)</h3><div id="tl"></div></div>
   <div class="cards-grid" id="cg"></div>
 </div>
 </div>
-<footer>Formula Finder v3.0 | EML Operator — Odrzywołek, arXiv 2026</footer>
+<footer>Formula Finder v3.0 | EML Operator &mdash; Odrzywolek, arXiv 2026</footer>
 <script>
-let csv=null;
-const dz=document.getElementById('dropZone');
-dz.addEventListener('click',function(e){if(e.target.tagName!=='LABEL'&&e.target.tagName!=='INPUT'){document.getElementById('fi').click();}});
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
-dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');handle(e.dataTransfer.files[0])});
-document.getElementById('fi').addEventListener('change',e=>handle(e.target.files[0]));
-function handle(f){if(!f)return;document.getElementById('fn').textContent='✅ '+f.name;const r=new FileReader();r.onload=e=>{csv=e.target.result;parseCols(csv)};r.readAsText(f)}
-function parseCols(c){const h=c.trim().split('\n')[0].split(',').map(x=>x.trim().replace(/"/g,''));const y=document.getElementById('yCol');const x=document.getElementById('xCols');y.innerHTML='';x.innerHTML='';h.forEach((v,i)=>{y.innerHTML+=`<option value="${v}" ${i===h.length-1?'selected':''}>${v}</option>`;x.innerHTML+=`<option value="${v}" ${i<h.length-1?'selected':''}>${v}</option>`});document.getElementById('colSel').style.display='block'}
-async function run(){
-  document.getElementById('spin').style.display='block';
-  document.getElementById('res').style.display='none';
-  document.getElementById('err').style.display='none';
-  document.getElementById('runBtn').disabled=true;
-  const yc=document.getElementById('yCol').value;
-  const xc=Array.from(document.getElementById('xCols').selectedOptions).map(o=>o.value);
-  const m=document.getElementById('method').value;
-  try{
-    const r=await fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv,y_col:yc,x_cols:xc,method:m})});
-    const d=await r.json();
-    if(!d.success)throw new Error(d.error);
-    show(d);
-  }catch(e){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Error: '+e.message}
-  finally{document.getElementById('spin').style.display='none';document.getElementById('runBtn').disabled=false}
+var csv = null;
+var fi = document.getElementById('fi');
+var chooseBtn = document.getElementById('chooseBtn');
+var dz = document.getElementById('dropZone');
+
+// Button opens file dialog — stopPropagation prevents bubble to dropZone
+chooseBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  fi.value = '';
+  fi.click();
+});
+
+// File selected via native dialog
+fi.addEventListener('change', function() {
+  if (fi.files && fi.files.length > 0) { handle(fi.files[0]); }
+});
+
+// Drag & drop
+dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+dz.addEventListener('drop', function(e) {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) { handle(e.dataTransfer.files[0]); }
+});
+
+function handle(f) {
+  if (!f) return;
+  document.getElementById('fn').textContent = '\u2705 ' + f.name;
+  var r = new FileReader();
+  r.onload = function(ev) { csv = ev.target.result; parseCols(csv); };
+  r.readAsText(f);
 }
-function show(d){
-  document.getElementById('res').style.display='block';
-  const b=d.quick_results&&d.quick_results[0]||{};
-  document.getElementById('bf').textContent=d.adam_formula||b.formula||'n/a';
-  document.getElementById('br').textContent='Accuracy: '+(d.adam_r2?(d.adam_r2*100).toFixed(4)+'%':b.accuracy||'n/a');
-  if(d.chart_b64)document.getElementById('ci').src='data:image/png;base64,'+d.chart_b64;
-  const tl=document.getElementById('tl');tl.innerHTML='';
-  const mx=Math.max(...(d.top_terms||[]).map(t=>Math.abs(t.weight)));
-  (d.top_terms||[]).forEach(t=>{const p=Math.min(100,Math.abs(t.weight)/mx*100);tl.innerHTML+=`<div class="term-row"><span class="term-name">${t.term}</span><div class="term-bar-wrap"><div class="term-bar" style="width:${p}%"></div></div><span class="term-w">${t.weight.toFixed(4)}</span></div>`});
-  const cg=document.getElementById('cg');cg.innerHTML='';
-  (d.quick_results||[]).forEach((r,i)=>{const qc=r.quality.includes('PERFECT')?'qp':r.quality.includes('GREAT')?'qg':'qb';cg.innerHTML+=`<div class="card"><div class="card-rank">#${i+1}</div><div class="card-formula">${r.formula}</div><div class="card-r2 ${qc}">${r.quality} &nbsp; R²=${r.r2.toFixed(6)} &nbsp; ${r.accuracy}</div></div>`});
+
+function parseCols(c) {
+  var h = c.trim().split('\n')[0].split(',').map(function(x){ return x.trim().replace(/"/g,''); });
+  var yEl = document.getElementById('yCol');
+  var xEl = document.getElementById('xCols');
+  yEl.innerHTML = ''; xEl.innerHTML = '';
+  h.forEach(function(v,i) {
+    yEl.innerHTML += '<option value="' + v + '"' + (i===h.length-1?' selected':'') + '>' + v + '</option>';
+    xEl.innerHTML += '<option value="' + v + '"' + (i<h.length-1?' selected':'') + '>' + v + '</option>';
+  });
+  document.getElementById('colSel').style.display = 'block';
+}
+
+async function run() {
+  document.getElementById('spin').style.display = 'block';
+  document.getElementById('res').style.display = 'none';
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('runBtn').disabled = true;
+  var yc = document.getElementById('yCol').value;
+  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
+  var m  = document.getElementById('method').value;
+  try {
+    var resp = await fetch('/api/find', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({csv:csv, y_col:yc, x_cols:xc, method:m})});
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+    show(d);
+  } catch(e) {
+    document.getElementById('err').style.display = 'block';
+    document.getElementById('err').textContent = 'Error: ' + e.message;
+  } finally {
+    document.getElementById('spin').style.display = 'none';
+    document.getElementById('runBtn').disabled = false;
+  }
+}
+
+function show(d) {
+  document.getElementById('res').style.display = 'block';
+  var b = (d.quick_results && d.quick_results[0]) || {};
+  document.getElementById('bf').textContent = d.adam_formula || b.formula || 'n/a';
+  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2*100).toFixed(4)+'%' : b.accuracy||'n/a');
+  if (d.chart_b64) document.getElementById('ci').src = 'data:image/png;base64,' + d.chart_b64;
+  var tl = document.getElementById('tl'); tl.innerHTML = '';
+  var weights = (d.top_terms||[]).map(function(t){ return Math.abs(t.weight); });
+  var mx = weights.length ? Math.max.apply(null, weights) : 1;
+  (d.top_terms||[]).forEach(function(t) {
+    var p = Math.min(100, Math.abs(t.weight)/mx*100);
+    tl.innerHTML += '<div class="term-row"><span class="term-name">'+t.term+'</span>'
+      +'<div class="term-bar-wrap"><div class="term-bar" style="width:'+p+'%"></div></div>'
+      +'<span class="term-w">'+t.weight.toFixed(4)+'</span></div>';
+  });
+  var cg = document.getElementById('cg'); cg.innerHTML = '';
+  (d.quick_results||[]).forEach(function(r,i) {
+    var qc = r.quality.includes('PERFECT')?'qp':r.quality.includes('GREAT')?'qg':'qb';
+    cg.innerHTML += '<div class="card"><div class="card-rank">#'+(i+1)+'</div>'
+      +'<div class="card-formula">'+r.formula+'</div>'
+      +'<div class="card-r2 '+qc+'">'+r.quality+' &nbsp; R\u00b2='+r.r2.toFixed(6)+' &nbsp; '+r.accuracy+'</div></div>';
+  });
 }
 </script></body></html>"""
 
+
 def create_app():
-    try:
-        from flask import Flask, request, jsonify, Response
-    except ImportError:
-        print("Install Flask: pip install flask"); return None
+    from flask import Flask, request, jsonify, Response
     app = Flask(__name__)
     app.config['MAX_CONTENT_LENGTH'] = 50*1024*1024
 
@@ -291,7 +364,6 @@ def create_app():
     return app
 
 
-# Render/gunicorn compatible app instance
 app = create_app()
 
 if __name__ == "__main__":
@@ -303,13 +375,8 @@ if __name__ == "__main__":
     args=p.parse_args()
     if args.demo:
         x=np.linspace(0.5,3,50); y=np.exp(x)+np.random.normal(0,0.05,50)
-        for r in quick_search({"x":x},y,top_n=3): print(f"  {r['formula']}  R²={r['r2']}")
+        for r in quick_search({"x":x},y,top_n=3): print(f"  {r['formula']}  R2={r['r2']}")
     else:
         app=create_app()
         if app:
-            print(f"""
-╔══════════════════════════════════════════╗
-║   Formula Finder v3.0 — RUNNING          ║
-║   Open: http://localhost:{args.port}          ║
-╚══════════════════════════════════════════╝""")
             app.run(host=args.host,port=args.port,debug=False)
