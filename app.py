@@ -97,111 +97,41 @@ def quick_search(X_dict,y,top_n=8,min_r2=0.5):
 
 def make_chart_b64(X_dict, y_true, model=None):
     try:
-        import matplotlib; matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        from matplotlib import rcParams
-        rcParams["font.family"] = "DejaVu Sans"
-
-        # ── Palette (Google Material inspired) ──
-        BG        = "#F8F9FA"   # light grey background
-        PANEL     = "#FFFFFF"   # white panel
-        GRID      = "#E8EAED"   # subtle grid
-        DATA_COL  = "#4285F4"   # Google blue  → data points
-        FIT_COL   = "#EA4335"   # Google red   → fit line
-        POS_COL   = "#34A853"   # Google green → positive residuals
-        NEG_COL   = "#EA4335"   # Google red   → negative residuals
-        ZERO_COL  = "#5F6368"   # dark grey    → zero line
-        TEXT_COL  = "#202124"   # near-black
-        SUB_COL   = "#5F6368"   # secondary text
-
-        vlist  = list(X_dict.keys())
-        x_vals = np.asarray(X_dict[vlist[0]], float)
-        y_arr  = np.asarray(y_true, float)
-        sidx   = np.argsort(x_vals)
-        xs, ys = x_vals[sidx], y_arr[sidx]
-
-        fig = plt.figure(figsize=(13, 4.5), facecolor=BG)
-        fig.subplots_adjust(left=0.07, right=0.97, top=0.88, bottom=0.14, wspace=0.32)
-        gs = gridspec.GridSpec(1, 2, figure=fig)
-
-        # ── Left: Data vs Fit ──
-        ax = fig.add_subplot(gs[0])
-        ax.set_facecolor(PANEL)
-        ax.grid(True, color=GRID, linewidth=0.8, zorder=0)
-        for s in ax.spines.values(): s.set_edgecolor(GRID)
-
-        # Data points — slightly transparent, smaller
-        ax.scatter(xs, ys, color=DATA_COL, s=22, alpha=0.75,
-                   label="Observed data", zorder=3, linewidths=0)
-
+        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+        vlist=list(X_dict.keys()); x_vals=np.asarray(X_dict[vlist[0]],float)
+        y_arr=np.asarray(y_true,float); sidx=np.argsort(x_vals); xs,ys=x_vals[sidx],y_arr[sidx]
+        fig,axes=plt.subplots(1,2,figsize=(12,4)); fig.patch.set_facecolor("#0D1B2A")
+        ax=axes[0]; ax.set_facecolor("#112233")
+        ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
         if model is not None:
             try:
-                yp = model.predict({vlist[0]: xs})
-                r2 = model.r2(X_dict, y_arr)
-                # Fit line — bold, on top, clearly different color
-                ax.plot(xs, yp, color=FIT_COL, lw=2.2,
-                        label="Model fit  R² = %.4f" % r2, zorder=4)
+                yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_arr)
+                ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label="Fit R\u00B2=%.4f"%r2,zorder=4)
             except: pass
-
-        ax.set_title("Data vs Fit  (%s)" % vlist[0],
-                     color=TEXT_COL, fontsize=11, fontweight="bold", pad=10)
-        ax.set_xlabel(vlist[0], color=SUB_COL, fontsize=9)
-        ax.set_ylabel("y", color=SUB_COL, fontsize=9)
-        ax.tick_params(colors=SUB_COL, labelsize=8)
-        leg = ax.legend(fontsize=8, frameon=True, framealpha=1,
-                        edgecolor=GRID, facecolor=PANEL, labelcolor=TEXT_COL)
-
-        # ── Right: Residuals ──
-        ax2 = fig.add_subplot(gs[1])
-        ax2.set_facecolor(PANEL)
-        ax2.grid(True, color=GRID, linewidth=0.8, zorder=0, axis="y")
-        for s in ax2.spines.values(): s.set_edgecolor(GRID)
-
+        ax.set_title("Data vs Fit (%s)"%vlist[0],color="white",fontsize=11)
+        ax.set_xlabel(vlist[0],color="#888"); ax.set_ylabel("y",color="#888")
+        ax.tick_params(colors="#888"); ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
+        for s in ax.spines.values(): s.set_edgecolor("#333355")
+        ax2=axes[1]; ax2.set_facecolor("#112233")
         if model is not None:
             try:
-                res2 = ys - model.predict({vlist[0]: xs})
-                colors = [POS_COL if v >= 0 else NEG_COL for v in res2]
-                ax2.bar(range(len(res2)), res2, color=colors, alpha=0.85,
-                        width=0.8, zorder=2)
-                ax2.axhline(0, color=ZERO_COL, lw=1.2, ls="-", zorder=3)
-                ax2.set_title("Residuals",
-                              color=TEXT_COL, fontsize=11, fontweight="bold", pad=10)
-                # Small legend for colors
-                from matplotlib.patches import Patch
-                ax2.legend(handles=[
-                    Patch(color=POS_COL, alpha=0.85, label="Positive"),
-                    Patch(color=NEG_COL, alpha=0.85, label="Negative"),
-                ], fontsize=7.5, frameon=True, framealpha=1,
-                   edgecolor=GRID, facecolor=PANEL, labelcolor=TEXT_COL)
-            except:
-                ax2.set_title("Residuals (unavailable)", color=SUB_COL, fontsize=11, pad=10)
-        else:
-            ax2.set_title("Residuals (no model)", color=SUB_COL, fontsize=11, pad=10)
-
-        ax2.tick_params(colors=SUB_COL, labelsize=8)
-        ax2.set_xlabel("Sample index", color=SUB_COL, fontsize=9)
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=BG)
-        plt.close(fig)
-        buf.seek(0)
-        data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        return data
-
+                res2=ys-model.predict({vlist[0]:xs}); ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
+                ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--"); ax2.set_title("Residuals",color="white",fontsize=11)
+            except: ax2.set_title("Residuals (unavailable)",color="#888",fontsize=11)
+        else: ax2.set_title("Residuals (no model)",color="#888",fontsize=11)
+        ax2.tick_params(colors="#888")
+        for s in ax2.spines.values(): s.set_edgecolor("#333355")
+        plt.tight_layout(); buf=io.BytesIO()
+        plt.savefig(buf,format="png",dpi=100,bbox_inches="tight",facecolor="#0D1B2A")
+        plt.close(fig); buf.seek(0); data=base64.b64encode(buf.read()).decode(); buf.close(); return data
     except Exception as ex:
         try:
             import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-            fig2, ax3 = plt.subplots(figsize=(6, 2))
-            fig2.patch.set_facecolor("#F8F9FA"); ax3.set_facecolor("#F8F9FA")
-            ax3.text(0.5, 0.5, "Chart error: %s" % str(ex),
-                     color="#EA4335", ha="center", va="center",
-                     transform=ax3.transAxes, fontsize=9)
-            ax3.axis("off"); buf2 = io.BytesIO()
-            plt.savefig(buf2, format="png", dpi=80, bbox_inches="tight", facecolor="#F8F9FA")
-            plt.close(fig2); buf2.seek(0)
-            return base64.b64encode(buf2.read()).decode()
+            fig2,ax3=plt.subplots(figsize=(6,2)); fig2.patch.set_facecolor("#0D1B2A"); ax3.set_facecolor("#0D1B2A")
+            ax3.text(0.5,0.5,"Chart error: %s"%str(ex),color="#EF4444",ha="center",va="center",transform=ax3.transAxes,fontsize=9)
+            ax3.axis("off"); buf2=io.BytesIO()
+            plt.savefig(buf2,format="png",dpi=80,bbox_inches="tight",facecolor="#0D1B2A")
+            plt.close(fig2); buf2.seek(0); return base64.b64encode(buf2.read()).decode()
         except: return ""
 
 # ─────────────────────────── HTML PAGE ───────────────────────────
@@ -247,21 +177,14 @@ header span{font-size:.72rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-label:hover{background:var(--neon)}
 #fn{margin-top:12px;color:var(--neon);font-weight:600;min-height:22px;font-size:.9rem}
 
-/* ── File stat badge ── */
-.file-stat{display:none;margin-bottom:20px;padding:12px 18px;background:var(--card);border:1px solid #1e3a5f;border-radius:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
-.file-stat.ok{border-left:3px solid var(--neon)}
-.file-stat.warn{border-left:3px solid var(--amber)}
-.file-stat.err{border-left:3px solid var(--red)}
-.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.stat-dot.ok{background:var(--neon)}
-.stat-dot.warn{background:var(--amber)}
-.stat-dot.err{background:var(--red)}
-.stat-text{font-size:.82rem;color:var(--silver);flex:1}
-.stat-text strong{color:var(--white)}
-.stat-tags{display:flex;gap:6px;flex-wrap:wrap}
-.stat-tag{font-size:.7rem;padding:2px 9px;border-radius:20px;background:var(--mid);color:var(--silver);border:1px solid #1e3a5f}
-.stat-tag.hi{color:var(--neon);border-color:rgba(6,214,160,.3)}
-.stat-tag.wa{color:var(--amber);border-color:rgba(252,211,77,.3)}
+/* ── CSV mini-preview ── */
+.preview-box{display:none;background:var(--mid);border:1px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:20px;overflow-x:auto}
+.preview-box h4{color:var(--teal);font-size:.78rem;letter-spacing:1px;margin-bottom:10px}
+.preview-table{border-collapse:collapse;font-size:.75rem;width:100%}
+.preview-table th{background:#0d1b2a;color:var(--neon);padding:5px 10px;text-align:left;border-bottom:1px solid #1e3a5f}
+.preview-table td{color:var(--silver);padding:4px 10px;border-bottom:1px solid #162840}
+.preview-table tr:last-child td{border-bottom:none}
+.preview-meta{font-size:.72rem;color:var(--silver);margin-top:8px;opacity:.7}
 
 /* ── Configure columns ── */
 .col-select{display:none;background:var(--card);border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid var(--teal)}
@@ -336,6 +259,30 @@ select:focus{outline:none;border-color:var(--teal)}
 /* ── Error ── */
 .error-box{background:#2a1018;border:1px solid var(--red);border-radius:10px;padding:14px 16px;color:var(--red);margin-bottom:16px;font-size:.88rem}
 
+
+/* ── Predict & Explain panels ── */
+.action-panels{display:none;gap:18px;margin-bottom:20px;flex-wrap:wrap}
+.action-panels.visible{display:flex}
+.panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px;flex:1;min-width:280px}
+.panel h3{color:var(--teal);font-size:.85rem;letter-spacing:1px;margin-bottom:16px;font-weight:700}
+.input-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.input-row{display:flex;align-items:center;gap:10px}
+.input-row label{color:var(--silver);font-size:.78rem;min-width:90px;font-family:monospace}
+.input-row input{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:6px;padding:7px 10px;font-size:.85rem;width:100%;transition:.2s}
+.input-row input:focus{outline:none;border-color:var(--teal)}
+.predict-result{font-size:1.4rem;font-weight:700;color:var(--neon);font-family:monospace;margin:10px 0 4px}
+.predict-label{font-size:.75rem;color:var(--silver)}
+.sens-row{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #1a2f4a;gap:10px}
+.sens-name{font-family:monospace;color:var(--white);font-size:.78rem;min-width:100px}
+.sens-bar-wrap{flex:1;height:6px;background:#1a2f4a;border-radius:3px;overflow:hidden}
+.sens-bar{height:100%;border-radius:3px;transition:width .5s ease}
+.sens-bar.pos{background:var(--neon)}
+.sens-bar.neg{background:var(--red)}
+.sens-val{font-size:.75rem;color:var(--silver);font-family:monospace;min-width:70px;text-align:right}
+.explain-box{font-size:.82rem;color:var(--silver);line-height:1.7;white-space:pre-wrap;background:var(--mid);border-radius:8px;padding:14px;border-left:3px solid var(--teal)}
+.panel-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:7px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;margin-top:4px}
+.panel-btn:hover{background:var(--neon)}
+.panel-btn:disabled{opacity:.5;cursor:not-allowed}
 footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;border-top:1px solid #1e3a5f;margin-top:40px}
 
 @media(max-width:600px){
@@ -344,6 +291,16 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   .col-group{min-width:100%}
   .best-formula{font-size:.95rem}
 }
+
+/* ── Template download panel ── */
+.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:20px 24px;margin-bottom:24px}
+.tpl-panel h3{color:var(--teal);font-size:.88rem;letter-spacing:1px;margin-bottom:4px;font-weight:700}
+.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:14px}
+.tpl-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:9px 12px;font-size:.85rem;flex:1;min-width:200px;max-width:420px}
+.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:8px;padding:6px 10px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none}
+.tpl-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;white-space:nowrap}
+.tpl-btn:hover{background:var(--neon)}
 </style>
 </head>
 <body>
@@ -352,11 +309,50 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   <span>Powered by EML + Adam</span>
 </header>
 <div class="container">
+  <!-- ── Template Download Panel ── -->
+  <div class="tpl-panel">
+    <h3>&#128204; NON HAI UN FILE? SCARICA UN ESEMPIO</h3>
+    <p>Scegli un template, scaricalo, compila con i tuoi dati reali e caricalo sopra.</p>
+    <div class="tpl-row">
+      <select class="tpl-select" id="tplSelect" onchange="updateTplDesc()">
+        <option value="">— Scegli un esempio —</option>
+        <option value="bolletta_elettrica.csv" data-desc="Scopri il costo al kWh dalla tua bolletta elettrica">&#128161; Bolletta elettrica</option>
+        <option value="consumo_benzina.csv" data-desc="Calcola quanto spendi per ogni km percorso">&#128664; Consumo benzina</option>
+        <option value="spesa_supermercato.csv" data-desc="Stima la spesa settimanale in base al numero di persone in casa">&#128717; Spesa supermercato</option>
+        <option value="rata_mutuo.csv" data-desc="Trova la formula della rata mensile del mutuo">&#128179; Rata mutuo</option>
+        <option value="risparmio_mensile.csv" data-desc="Calcola quanto riesci a risparmiare ogni mese">&#128167; Risparmio mensile</option>
+        <option value="stipendio_esperienza.csv" data-desc="Come cresce lo stipendio con gli anni di esperienza">&#128200; Stipendio per esperienza</option>
+        <option value="bmi.csv" data-desc="Indice di massa corporea: formula peso/altezza&#178;">&#9878; BMI</option>
+        <option value="calorie_camminata.csv" data-desc="Calorie bruciate camminando in base a peso e distanza">&#128293; Calorie camminando</option>
+        <option value="media_voti.csv" data-desc="Calcola la media scolastica da voti e materie">&#128218; Media voti</option>
+        <option value="studio_vs_voto.csv" data-desc="Quanto studio serve per ottenere un buon voto?">&#9201; Studio vs Voto</option>
+        <option value="consumo_acqua.csv" data-desc="Litri d&#39;acqua consumati per numero di persone in casa">&#128167; Consumo acqua</option>
+        <option value="gas_riscaldamento.csv" data-desc="Consumo di gas in inverno in base alla temperatura esterna">&#127777; Gas riscaldamento</option>
+              <option value="" disabled>── Scienza &amp; Tecnica ──</option>
+        <option value="newton.csv" data-desc="Seconda legge di Newton: F = m × a">&#9881; Fisica — Legge di Newton (F=ma)</option>
+        <option value="energia_cinetica.csv" data-desc="Energia cinetica: E = ½ × m × v²">&#9889; Fisica — Energia cinetica</option>
+        <option value="gas_ideale.csv" data-desc="Gas ideale semplificato: P × V = costante × T">&#127776; Fisica — Gas ideale (PV=nRT)</option>
+        <option value="caduta_libera.csv" data-desc="Caduta libera: h = ½ × g × t²">&#127773; Fisica — Caduta libera</option>
+        <option value="interesse_composto.csv" data-desc="Interesse composto: V = C × (1 + r)^t">&#128176; Finanza — Interesse composto</option>
+        <option value="legge_ohm.csv" data-desc="Legge di Ohm: V = I × R">&#9889; Elettronica — Legge di Ohm</option>
+        <option value="potenza_elettrica.csv" data-desc="Potenza elettrica: P = V × I">&#128268; Elettronica — Potenza elettrica</option>
+        <option value="stima_immobiliare.csv" data-desc="Stima del prezzo immobiliare: regressione multivariabile">&#127968; Immobiliare — Stima prezzo</option>
+        <option value="dose_farmaco.csv" data-desc="Dose del farmaco proporzionale al peso corporeo">&#128138; Medicina — Dose farmaco</option>
+        <option value="ph_soluzione.csv" data-desc="pH di una soluzione: pH = -log[H+]">&#9878; Chimica — pH soluzione</option>
+        <option value="velocita_suono.csv" data-desc="Velocità del suono in aria al variare della temperatura">&#127926; Acustica — Velocità del suono</option>
+        <option value="crescita_batterica.csv" data-desc="Crescita batterica esponenziale: N = N0 × e^(k×t)">&#129440; Biologia — Crescita batterica</option>
+      </select>
+      <button class="tpl-btn" onclick="downloadTemplate()">&#8681; Scarica template</button>
+    </div>
+    <div class="tpl-desc" id="tplDesc"></div>
+  </div>
+
+
 
   <!-- ── How it works accordion ── -->
   <div class="how-box">
     <button class="how-toggle" id="howToggle" onclick="toggleHow()">
-      HOW TO USE FORMULA FINDER
+      &#128161; HOW TO USE FORMULA FINDER
       <span class="how-arrow" id="howArrow">&#9660;</span>
     </button>
     <div class="how-body" id="howBody">
@@ -381,34 +377,33 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
           Hold <strong>Cmd &#8984;</strong> (Mac) or <strong>Ctrl</strong> (Windows) to pick multiple columns.</p>
         </div>
         <div class="how-card">
-          <div class="how-step">STEP 4 &mdash; METHOD &amp; RUN</div>
+          <div class="how-step">STEP 4 &mdash; RUN &amp; EXPLORE</div>
           <p><strong>Both</strong> = maximum accuracy (recommended).<br>
           <strong>Quick</strong> = fast scan of common formulas.<br>
-          <strong>Adam</strong> = deep nonlinear optimizer.<br>
-          Press <strong>FIND FORMULA</strong> and wait a few seconds.</p>
+          After results: <strong>predict</strong> new values, see which variables <strong>impact Y most</strong>, and get a <strong>plain English explanation</strong> of the formula.</p>
         </div>
       </div>
       <div class="how-warn">
-        <strong>Excel &amp; semicolons:</strong> if your language settings use <strong>;</strong> as separator (Italian, German, French…), Excel may export CSV with semicolons instead of commas. The app will then see all data as a single column. Fix: open the CSV in a text editor, replace <code>;</code> with <code>,</code> &mdash; or choose <em>CSV UTF-8 (comma delimited)</em> when saving.<br><br>
-        <strong>Column named &ldquo;Y&rdquo;:</strong> if one of your input variables is called <code>Y</code> (e.g. a geometric Y coordinate), rename it to something like <code>coord_y</code> before uploading, otherwise it will be auto-selected as the target variable.
+        &#9888;&nbsp;<strong>Excel &amp; semicolons:</strong> if your language settings use <strong>;</strong> as separator (Italian, German, French…), Excel may export CSV with semicolons instead of commas. The app will then see all data as a single column. Fix: open the CSV in a text editor, replace <code>;</code> with <code>,</code> &mdash; or choose <em>CSV UTF-8 (comma delimited)</em> when saving.<br><br>
+        &#9888;&nbsp;<strong>Column named &ldquo;Y&rdquo;:</strong> if one of your input variables is called <code>Y</code> (e.g. a geometric Y coordinate), rename it to something like <code>coord_y</code> before uploading, otherwise it will be auto-selected as the target variable.
       </div>
     </div>
   </div>
 
   <!-- ── Upload ── -->
   <div class="upload-zone" id="dropZone">
-    <h2>Drop your CSV file here</h2>
+    <h2>&#128196; Drop your CSV file here</h2>
     <p>or click the button below to browse</p>
     <input type="file" id="fi" accept=".csv">
-    <label for="fi" class="upload-label">Choose File</label>
+    <label for="fi" class="upload-label">&#128193; Choose File</label>
     <p id="fn"></p>
   </div>
 
-  <!-- ── File stat badge ── -->
-  <div class="file-stat" id="fileStat">
-    <span class="stat-dot" id="statDot"></span>
-    <span class="stat-text" id="statText"></span>
-    <div class="stat-tags" id="statTags"></div>
+  <!-- ── CSV mini-preview ── -->
+  <div class="preview-box" id="previewBox">
+    <h4>&#128202; FILE PREVIEW</h4>
+    <div id="previewTable"></div>
+    <div class="preview-meta" id="previewMeta"></div>
   </div>
 
   <!-- ── Configure Columns ── -->
@@ -416,17 +411,17 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <h3>CONFIGURE COLUMNS</h3>
     <div class="col-row">
       <div class="col-group">
-        <label>Target Y</label>
+        <label>&#127919; Target Y</label>
         <select id="yCol" onchange="syncXcols()"></select>
         <span class="hint">The variable you want to predict</span>
       </div>
       <div class="col-group" style="flex:1;min-width:180px">
-        <label>Variables X</label>
+        <label>&#128200; Variables X</label>
         <select id="xCols" multiple style="height:110px"></select>
         <span class="hint">Cmd/Ctrl to select multiple &nbsp;&bull;&nbsp; Y is automatically excluded</span>
       </div>
       <div class="col-group">
-        <label>Method</label>
+        <label>&#9881; Method</label>
         <select id="method" onchange="updatePreviewLabel()">
           <option value="both">Both (Quick + Adam)</option>
           <option value="quick">Quick only</option>
@@ -452,9 +447,41 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
       <button class="expand-btn" id="expandBtn" onclick="toggleFormula()" style="display:none">&#9660; Show full formula</button>
       <div class="best-r2" id="br"></div>
       <div class="result-actions">
-        <button class="action-btn" id="copyBtn" onclick="copyFormula()">Copy formula</button>
-        <button class="action-btn" onclick="exportCSV()">Download results CSV</button>
+        <button class="action-btn" id="copyBtn" onclick="copyFormula()">&#128203; Copy formula</button>
+        <button class="action-btn" onclick="exportCSV()">&#8681; Download results CSV</button>
       </div>
+    </div>
+
+    <!-- ── Action panels: Predict · Sensitivity · Explain ── -->
+    <div class="action-panels" id="actionPanels">
+
+      <!-- Predict -->
+      <div class="panel">
+        <h3>PREDICT A NEW VALUE</h3>
+        <div class="input-grid" id="predictInputs"></div>
+        <button class="panel-btn" id="predictBtn" onclick="runPredict()">Calculate</button>
+        <div style="margin-top:14px">
+          <div class="predict-result" id="predictResult" style="display:none"></div>
+          <div class="predict-label" id="predictLabel"></div>
+        </div>
+      </div>
+
+      <!-- Sensitivity -->
+      <div class="panel">
+        <h3>VARIABLE IMPACT</h3>
+        <div style="font-size:.75rem;color:var(--silver);margin-bottom:12px">How much does each variable move Y, at current input values?</div>
+        <div id="sensResult"><span style="color:var(--silver);font-size:.8rem">Run a prediction to see impact.</span></div>
+      </div>
+
+      <!-- Explain -->
+      <div class="panel" style="flex:1.2">
+        <h3>PLAIN ENGLISH EXPLANATION</h3>
+        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain this formula</button>
+        <div style="margin-top:14px">
+          <div class="explain-box" id="explainResult" style="display:none"></div>
+        </div>
+      </div>
+
     </div>
     <div class="chart-box">
       <h3>DASHBOARD</h3>
@@ -471,7 +498,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   </div>
 
 </div>
-<footer>FormulaFinder (surely created by not G.)</footer>
+<footer>FormulaFinder &mdash; undoubtedly created by surely not A.G.</footer>
 
 <script>
 var csv            = null;
@@ -498,7 +525,7 @@ dz.addEventListener('drop', function(e){
 
 function handleFile(f) {
   if (!f) return;
-  document.getElementById('fn').textContent = f.name;
+  document.getElementById('fn').textContent = '\u2705 ' + f.name;
 
   // Use PapaParse for robust CSV parsing (handles BOM, quotes, auto-detects separator)
   Papa.parse(f, {
@@ -507,7 +534,7 @@ function handleFile(f) {
     dynamicTyping: false,
     complete: function(result) {
       if (!result.data || result.data.length === 0) {
-        document.getElementById('fn').textContent = 'Could not parse file — check format.';
+        document.getElementById('fn').textContent = '\u274c Could not parse file. Check format.';
         return;
       }
       parsedData = result;
@@ -518,7 +545,7 @@ function handleFile(f) {
       parseCols();
     },
     error: function(err) {
-      document.getElementById('fn').textContent = 'Parse error: ' + err.message;
+      document.getElementById('fn').textContent = '\u274c Parse error: ' + err.message;
     }
   });
 }
@@ -541,7 +568,7 @@ function showPreview(result) {
   html += '</tbody></table>';
   wrap.innerHTML = html;
   meta.textContent = result.data.length + ' rows \u00B7 ' + cols.length + ' columns detected' +
-    (result.meta.delimiter !== ',' ? '  Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
+    (result.meta.delimiter !== ',' ? '  \u26a0\ufe0f Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
   box.style.display = 'block';
 }
 
@@ -623,7 +650,7 @@ async function run() {
     showResults(d);
   } catch(e) {
     document.getElementById('err').style.display = 'block';
-    document.getElementById('err').textContent   = e.message;
+    document.getElementById('err').textContent   = '\u274c ' + e.message;
   } finally {
     document.getElementById('spin').style.display = 'none';
     document.getElementById('runBtn').disabled    = false;
@@ -683,6 +710,9 @@ function showResults(d) {
   if (!(d.quick_results || []).length) {
     cg.innerHTML = '<p style="color:var(--silver);font-size:.85rem">No Quick Search results.</p>';
   }
+  // Build predict inputs
+  buildPredictInputs(lastResults._x_cols || [], d.quick_results || []);
+
   (d.quick_results || []).forEach(function(r, i) {
     var cls      = r.quality === 'PERFECT' ? 'qp' : r.quality === 'GREAT' ? 'qg' : 'qb';
     var badgeCls = r.quality === 'PERFECT' ? 'badge-p' : r.quality === 'GREAT' ? 'badge-g' : 'badge-b';
@@ -701,8 +731,8 @@ function copyFormula() {
   if (!formula || formula === 'n/a') return;
   navigator.clipboard.writeText(formula).then(function() {
     var btn = document.getElementById('copyBtn');
-    btn.textContent = 'Copied!';
-    setTimeout(function(){ btn.textContent = 'Copy formula'; }, 1800);
+    btn.textContent = '\u2705 Copied!';
+    setTimeout(function(){ btn.textContent = '\u{1F4CB} Copy formula'; }, 1800);
   }).catch(function() {
     // fallback
     var ta = document.createElement('textarea');
@@ -731,6 +761,103 @@ function exportCSV() {
 }
 
 // ── Helpers ──
+// ── Build predict input fields after results ──
+function buildPredictInputs(xCols, quick_results) {
+  var grid = document.getElementById('predictInputs');
+  grid.innerHTML = '';
+  xCols.forEach(function(col) {
+    grid.innerHTML +=
+      '<div class="input-row">' +
+      '<label>' + col + '</label>' +
+      '<input type="number" step="any" id="pi_' + col + '" placeholder="enter value">' +
+      '</div>';
+  });
+  document.getElementById('actionPanels').classList.add('visible');
+}
+
+// ── Run prediction ──
+async function runPredict() {
+  var yc  = lastResults._y_col;
+  var xc  = lastResults._x_cols;
+  var inputs = {};
+  var ok = true;
+  xc.forEach(function(col) {
+    var v = document.getElementById('pi_' + col).value;
+    if (v === '' || isNaN(parseFloat(v))) { ok = false; }
+    else inputs[col] = parseFloat(v);
+  });
+  if (!ok) { alert('Please enter all input values.'); return; }
+
+  document.getElementById('predictBtn').disabled = true;
+  document.getElementById('predictBtn').textContent = 'Calculating...';
+  try {
+    var resp = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, inputs: inputs})
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+
+    // Show prediction
+    var res = document.getElementById('predictResult');
+    res.style.display = 'block';
+    res.textContent = d.prediction.toLocaleString(undefined, {maximumFractionDigits: 4});
+    document.getElementById('predictLabel').textContent = 'Predicted value of ' + yc;
+
+    // Show sensitivity bars
+    var sens = d.sensitivity;
+    var maxAbs = Math.max.apply(null, Object.values(sens).map(Math.abs)) || 1;
+    var html = '';
+    Object.keys(sens).sort(function(a,b){ return Math.abs(sens[b]) - Math.abs(sens[a]); })
+    .forEach(function(k) {
+      var v   = sens[k];
+      var pct = Math.min(100, Math.abs(v) / maxAbs * 100).toFixed(1);
+      var cls = v >= 0 ? 'pos' : 'neg';
+      var sign = v >= 0 ? '+' : '';
+      html += '<div class="sens-row">' +
+        '<span class="sens-name">' + k + '</span>' +
+        '<div class="sens-bar-wrap"><div class="sens-bar ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<span class="sens-val">' + sign + v.toFixed(3) + '</span>' +
+        '</div>';
+    });
+    document.getElementById('sensResult').innerHTML = html;
+
+  } catch(e) { alert('Prediction error: ' + e.message); }
+  finally {
+    document.getElementById('predictBtn').disabled = false;
+    document.getElementById('predictBtn').textContent = 'Calculate';
+  }
+}
+
+// ── Explain formula in plain English ──
+async function runExplain() {
+  if (!lastResults) return;
+  document.getElementById('explainBtn').disabled = true;
+  document.getElementById('explainBtn').textContent = 'Thinking...';
+  try {
+    var resp = await fetch('/api/explain', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        top_terms: lastResults.top_terms || [],
+        formula:   lastResults.adam_formula || '',
+        r2:        lastResults.adam_r2 || null,
+        y_col:     lastResults._y_col || 'Y'
+      })
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+    var box = document.getElementById('explainResult');
+    box.style.display = 'block';
+    box.textContent = d.explanation;
+  } catch(e) { alert('Explain error: ' + e.message); }
+  finally {
+    document.getElementById('explainBtn').disabled = false;
+    document.getElementById('explainBtn').textContent = 'Explain this formula';
+  }
+}
+
 function toggleHow() {
   var body   = document.getElementById('howBody');
   var arrow  = document.getElementById('howArrow');
@@ -749,15 +876,79 @@ function toggleFormula() {
 
 function showValMsg(msg) {
   var el = document.getElementById('valMsg');
-  el.textContent = msg;
+  el.textContent = '\u26a0\ufe0f ' + msg;
   el.style.display = 'block';
 }
 function hideValMsg() {
   document.getElementById('valMsg').style.display = 'none';
 }
+
+// ── Template download panel ──
+var TEMPLATE_DATA = {
+  "bolletta_elettrica.csv": "kwh_consumati,costo_euro\n100,18\n200,36\n350,63\n500,90\n750,135\n1000,180",
+  "consumo_benzina.csv": "km_percorsi,litri_consumati,costo_euro\n100,7,11.2\n250,17.5,28.0\n400,28.0,44.8\n600,42.0,67.2\n800,56.0,89.6\n1000,70.0,112.0",
+  "spesa_supermercato.csv": "num_persone,pasti_settimana,spesa_euro\n1,14,80\n2,14,140\n3,14,190\n4,14,240\n5,14,290\n6,14,340",
+  "rata_mutuo.csv": "importo_euro,anni,rata_mensile_euro\n80000,15,560\n100000,20,550\n150000,20,825\n200000,25,900\n250000,30,1050\n300000,30,1260",
+  "risparmio_mensile.csv": "stipendio_netto,spese_fisse,spese_variabili,risparmio\n1200,600,300,300\n1500,700,350,450\n1800,800,400,600\n2000,900,500,600\n2500,1000,600,900\n3000,1200,700,1100",
+  "stipendio_esperienza.csv": "anni_esperienza,stipendio_euro\n0,1200\n2,1350\n5,1600\n8,1900\n12,2300\n15,2700\n20,3200",
+  "bmi.csv": "peso_kg,altezza_m,bmi\n50,1.60,19.5\n60,1.65,22.0\n70,1.75,22.9\n80,1.70,27.7\n90,1.80,27.8\n100,1.70,34.6\n110,1.75,35.9",
+  "calorie_camminata.csv": "peso_kg,km_percorsi,calorie_bruciate\n60,3,150\n75,3,187\n60,5,250\n70,5,280\n80,7,420\n70,10,560\n90,10,630",
+  "media_voti.csv": "num_materie,somma_voti,media\n5,38,7.6\n6,48,8.0\n8,56,7.0\n7,63,9.0\n4,32,8.0\n9,72,8.0",
+  "studio_vs_voto.csv": "ore_studio_settimana,voto_esame\n2,5.0\n5,6.5\n8,7.5\n12,8.5\n15,9.0\n18,9.5\n20,10.0",
+  "consumo_acqua.csv": "persone_casa,giorni,litri_consumati\n1,30,1500\n2,30,2800\n3,30,4000\n4,30,5100\n5,30,6200\n6,30,7200",
+  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n5,8,2.5\n2,10,3.8\n0,12,5.0\n-3,14,7.2\n-5,16,9.5\n-8,18,12.0",
+  "newton.csv": "massa_kg,accelerazione_ms2,forza_N\n1,10,10\n2,10,20\n3,5,15\n5,5,25\n10,10,100\n7,3,21",
+  "energia_cinetica.csv": "massa_kg,velocita_ms,energia_J\n1,2,2\n2,3,9\n1,4,8\n3,2,6\n2,5,25\n4,3,18",
+  "gas_ideale.csv": "pressione_Pa,volume_m3,temperatura_K\n101325,0.0224,273\n202650,0.0112,273\n101325,0.0448,546\n50662,0.0448,273\n303975,0.0075,273",
+  "caduta_libera.csv": "tempo_s,altezza_m\n0,0\n1,4.9\n2,19.6\n3,44.1\n4,78.4\n5,122.5\n6,176.4",
+  "interesse_composto.csv": "capitale,tasso_annuo,anni,valore_finale\n1000,0.05,1,1050\n1000,0.05,2,1102.5\n2000,0.03,3,2185.45\n5000,0.07,5,7012.76\n3000,0.04,4,3509.56",
+  "legge_ohm.csv": "corrente_A,resistenza_ohm,tensione_V\n1,10,10\n2,10,20\n0.5,100,50\n3,5,15\n2,50,100\n0.1,1000,100",
+  "potenza_elettrica.csv": "tensione_V,corrente_A,potenza_W\n230,1,230\n230,2,460\n12,5,60\n5,0.5,2.5\n220,3,660\n9,1,9",
+  "stima_immobiliare.csv": "superficie_mq,distanza_centro_km,piano,prezzo_euro\n50,1,2,200000\n80,2,4,280000\n60,0.5,1,250000\n100,5,3,220000\n120,3,5,350000\n70,1.5,3,260000",
+  "dose_farmaco.csv": "peso_kg,dose_mg\n50,250\n60,300\n70,350\n80,400\n90,450\n100,500\n40,200",
+  "ph_soluzione.csv": "concentrazione_H,pH\n0.1,1.0\n0.01,2.0\n0.001,3.0\n0.0001,4.0\n0.00001,5.0\n1,0.0",
+  "velocita_suono.csv": "temperatura_C,velocita_ms\n0,331\n10,337\n20,343\n30,349\n40,355\n-10,325",
+  "crescita_batterica.csv": "tempo_ore,num_batteri\n0,100\n1,200\n2,400\n3,800\n4,1600\n5,3200\n6,6400",
+};
+
+function updateTplDesc() {
+  var sel = document.getElementById('tplSelect');
+  var opt = sel.options[sel.selectedIndex];
+  var desc = document.getElementById('tplDesc');
+  if (sel.value && opt.dataset.desc) {
+    desc.textContent = 'ℹ️ ' + opt.dataset.desc;
+    desc.style.display = 'block';
+  } else {
+    desc.style.display = 'none';
+  }
+}
+
+function downloadTemplate() {
+  var sel = document.getElementById('tplSelect');
+  var fname = sel.value;
+  if (!fname) { alert('Seleziona prima un template!'); return; }
+  var data = TEMPLATE_DATA[fname];
+  if (!data) { alert('Template non trovato.'); return; }
+  var blob = new Blob([data], {type: 'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>"""
+
+
+def _plain_english(top3, y_col):
+    if not top3: return "No clear pattern found."
+    parts = []
+    for t in top3:
+        dirn = "higher" if t["weight"] > 0 else "lower"
+        parts.append("%s tends to make %s %s" % (t["term"], y_col, dirn))
+    return "; ".join(parts) + "."
 
 
 def create_app():
@@ -771,7 +962,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '4.1'})
+        return jsonify({'status': 'ok', 'version': '4.0'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
@@ -812,6 +1003,62 @@ def create_app():
                 result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
                 result['top_terms']    = model.top_terms(5)
             return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+
+    @app.route('/api/predict', methods=['POST'])
+    def api_predict():
+        """Given a fitted formula (adam weights) and input values, return prediction."""
+        try:
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            model  = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+            # predict single point
+            inp    = {k: np.array([float(v)]) for k, v in body['inputs'].items()}
+            pred   = float(model.predict(inp)[0])
+            # sensitivity: partial derivative via finite diff
+            sens = {}
+            for k in body['x_cols']:
+                base = {kk: np.array([float(body['inputs'][kk])]) for kk in body['x_cols']}
+                delta = abs(float(body['inputs'][k])) * 0.01 + 1e-6
+                base_up = dict(base); base_up[k] = np.array([float(body['inputs'][k]) + delta])
+                sens[k] = round(float((model.predict(base_up)[0] - model.predict(base)[0]) / delta), 4)
+            return jsonify({'success': True, 'prediction': round(pred, 4), 'sensitivity': sens})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    @app.route('/api/explain', methods=['POST'])
+    def api_explain():
+        """Natural language explanation of the top terms."""
+        try:
+            body      = request.get_json()
+            terms     = body.get('top_terms', [])
+            formula   = body.get('formula', '')
+            r2        = body.get('r2', None)
+            y_col     = body.get('y_col', 'Y')
+            if not terms:
+                return jsonify({'success': True, 'explanation': 'No significant terms found.'})
+            # Sort by abs weight
+            terms_s = sorted(terms, key=lambda t: abs(t['weight']), reverse=True)
+            total   = sum(abs(t['weight']) for t in terms_s) or 1
+            lines   = []
+            for i, t in enumerate(terms_s[:5]):
+                pct  = round(abs(t['weight']) / total * 100, 1)
+                dirn = 'increases' if t['weight'] > 0 else 'decreases'
+                lines.append("  %d. %s — %s %s by %.4f per unit (%.1f%% of total influence)" % (
+                    i+1, t['term'], t['term'], dirn, abs(t['weight']), pct))
+            r2_str = ("The model explains %.2f%% of the variance in %s." % (r2*100, y_col)) if r2 else ''
+            explanation = (
+                "Formula summary for %s:\n\n" % y_col +
+                r2_str + ("\n\n" if r2_str else "") +
+                "Key drivers (by importance):\n" +
+                "\n".join(lines) +
+                "\n\nIn plain English: " + _plain_english(terms_s[:3], y_col)
+            )
+            return jsonify({'success': True, 'explanation': explanation})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 400
 
