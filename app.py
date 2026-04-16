@@ -174,8 +174,8 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
 <div class="upload-zone" id="dropZone">
   <h2>Drop your CSV file here</h2>
   <p>or click to browse your files</p>
-  <button class="upload-btn" onclick="document.getElementById('fi').click()">Choose File</button>
-  <input type="file" id="fi" accept=".csv">
+  <label for="fi" class="upload-btn" style="cursor:pointer;display:inline-block;margin-top:18px;">Choose File</label>
+  <input type="file" id="fi" accept=".csv" style="display:none">
   <p id="fn" style="margin-top:12px;color:var(--neon);font-weight:600"></p>
 </div>
 <div class="col-select" id="colSel">
@@ -200,6 +200,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
 <script>
 let csv=null;
 const dz=document.getElementById('dropZone');
+dz.addEventListener('click',function(e){if(e.target.tagName!=='LABEL'&&e.target.tagName!=='INPUT'){document.getElementById('fi').click();}});
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
 dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
 dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');handle(e.dataTransfer.files[0])});
