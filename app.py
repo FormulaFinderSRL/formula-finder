@@ -142,8 +142,73 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Formula Finder</title>
-<!-- PapaParse: robust CSV parsing (handles quotes, BOM, semicolons) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* Minimal robust CSV parser — handles BOM, quoted fields, auto-detects , ; \t */
+var Papa = (function(){
+  function detectDelim(str) {
+    var s = str.slice(0, 2000);
+    var counts = {',': 0, ';': 0, '\t': 0};
+    var inQ = false;
+    for (var i = 0; i < s.length; i++) {
+      if (s[i] === '"') { inQ = !inQ; continue; }
+      if (!inQ && counts[s[i]] !== undefined) counts[s[i]]++;
+    }
+    var best = ',', max = -1;
+    Object.keys(counts).forEach(function(k){ if(counts[k]>max){max=counts[k];best=k;} });
+    return best;
+  }
+  function parseRows(str, delim) {
+    var rows = [], row = [], cur = '', inQ = false, i = 0;
+    while (i < str.length) {
+      var c = str[i];
+      if (c === '"') {
+        if (inQ && str[i+1] === '"') { cur += '"'; i += 2; continue; }
+        inQ = !inQ; i++; continue;
+      }
+      if (!inQ && c === delim) { row.push(cur); cur = ''; i++; continue; }
+      if (!inQ && (c === '\n' || (c === '\r' && str[i+1] === '\n'))) {
+        row.push(cur); rows.push(row); row = []; cur = '';
+        if (c === '\r') i++;
+        i++; continue;
+      }
+      cur += c; i++;
+    }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+  return {
+    parse: function(file, opts) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          var raw = e.target.result.replace(/^\uFEFF/, '');
+          var delim = detectDelim(raw);
+          var rows = parseRows(raw.trim(), delim);
+          if (rows.length < 2) { opts.error && opts.error({message:'No data rows found'}); return; }
+          var fields = rows[0].map(function(f){ return f.trim(); });
+          var data = [];
+          for (var i = 1; i < rows.length; i++) {
+            if (rows[i].length === 1 && rows[i][0] === '') continue;
+            var obj = {};
+            fields.forEach(function(f, j){ obj[f] = (rows[i][j] || '').trim(); });
+            data.push(obj);
+          }
+          opts.complete && opts.complete({data:data, meta:{fields:fields, delimiter:delim}});
+        } catch(ex) { opts.error && opts.error({message: String(ex)}); }
+      };
+      reader.onerror = function(){ opts.error && opts.error({message:'FileReader error'}); };
+      reader.readAsText(file);
+    },
+    unparse: function(data) {
+      if (!data || !data.length) return '';
+      var fields = Object.keys(data[0]);
+      var lines = [fields.join(',')];
+      data.forEach(function(r){ lines.push(fields.map(function(f){ return r[f]||''; }).join(',')); });
+      return lines.join('\n');
+    }
+  };
+})();
+</script>
 <style>
 :root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -177,21 +242,14 @@ header span{font-size:.72rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-label:hover{background:var(--neon)}
 #fn{margin-top:12px;color:var(--neon);font-weight:600;min-height:22px;font-size:.9rem}
 
-/* ── File stat badge ── */
-.file-stat{display:none;margin-bottom:20px;padding:12px 18px;background:var(--card);border:1px solid #1e3a5f;border-radius:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
-.file-stat.ok{border-left:3px solid var(--neon)}
-.file-stat.warn{border-left:3px solid var(--amber)}
-.file-stat.err{border-left:3px solid var(--red)}
-.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.stat-dot.ok{background:var(--neon)}
-.stat-dot.warn{background:var(--amber)}
-.stat-dot.err{background:var(--red)}
-.stat-text{font-size:.82rem;color:var(--silver);flex:1}
-.stat-text strong{color:var(--white)}
-.stat-tags{display:flex;gap:6px;flex-wrap:wrap}
-.stat-tag{font-size:.7rem;padding:2px 9px;border-radius:20px;background:var(--mid);color:var(--silver);border:1px solid #1e3a5f}
-.stat-tag.hi{color:var(--neon);border-color:rgba(6,214,160,.3)}
-.stat-tag.wa{color:var(--amber);border-color:rgba(252,211,77,.3)}
+/* ── CSV mini-preview ── */
+.preview-box{display:none;background:var(--mid);border:1px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:20px;overflow-x:auto}
+.preview-box h4{color:var(--teal);font-size:.78rem;letter-spacing:1px;margin-bottom:10px}
+.preview-table{border-collapse:collapse;font-size:.75rem;width:100%}
+.preview-table th{background:#0d1b2a;color:var(--neon);padding:5px 10px;text-align:left;border-bottom:1px solid #1e3a5f}
+.preview-table td{color:var(--silver);padding:4px 10px;border-bottom:1px solid #162840}
+.preview-table tr:last-child td{border-bottom:none}
+.preview-meta{font-size:.72rem;color:var(--silver);margin-top:8px;opacity:.7}
 
 /* ── Configure columns ── */
 .col-select{display:none;background:var(--card);border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid var(--teal)}
@@ -334,11 +392,11 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <p id="fn"></p>
   </div>
 
-  <!-- ── File stat badge ── -->
-  <div class="file-stat" id="fileStat">
-    <span class="stat-dot" id="statDot"></span>
-    <span class="stat-text" id="statText"></span>
-    <div class="stat-tags" id="statTags"></div>
+  <!-- ── CSV mini-preview ── -->
+  <div class="preview-box" id="previewBox">
+    <h4>FILE PREVIEW</h4>
+    <div id="previewTable"></div>
+    <div class="preview-meta" id="previewMeta"></div>
   </div>
 
   <!-- ── Configure Columns ── -->
@@ -401,7 +459,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   </div>
 
 </div>
-<footer>FormulaFinder (surely created by not G.)</footer>
+<footer>FormulaFinder &mdash; undoubtedly created by surely not A.G.</footer>
 
 <script>
 var csv            = null;
@@ -471,7 +529,7 @@ function showPreview(result) {
   html += '</tbody></table>';
   wrap.innerHTML = html;
   meta.textContent = result.data.length + ' rows \u00B7 ' + cols.length + ' columns detected' +
-    (result.meta.delimiter !== ',' ? '  Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
+    (result.meta.delimiter !== ',' ? '  \u26a0\ufe0f Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
   box.style.display = 'block';
 }
 
@@ -701,7 +759,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '4.1'})
+        return jsonify({'status': 'ok', 'version': '4.0'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
