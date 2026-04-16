@@ -293,14 +293,17 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 }
 
 /* ── Template download panel ── */
-.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:20px 24px;margin-bottom:24px}
-.tpl-panel h3{color:var(--teal);font-size:.88rem;letter-spacing:1px;margin-bottom:4px;font-weight:700}
-.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:14px}
+.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px 28px;margin-bottom:24px}
+.tpl-panel h3{color:var(--white);font-size:.82rem;letter-spacing:2px;margin-bottom:4px;font-weight:700;text-transform:uppercase}
+.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:16px;line-height:1.55}
 .tpl-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:9px 12px;font-size:.85rem;flex:1;min-width:200px;max-width:420px}
-.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:8px;padding:6px 10px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none}
-.tpl-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;white-space:nowrap}
-.tpl-btn:hover{background:var(--neon)}
+.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;font-size:.85rem;flex:1;min-width:220px;max-width:460px;cursor:pointer;transition:.2s;appearance:auto}
+.tpl-select:focus{outline:none;border-color:var(--teal)}
+.tpl-select optgroup{color:var(--teal);font-size:.75rem;font-weight:700;letter-spacing:.5px}
+.tpl-select option{color:var(--white);font-size:.84rem;padding:4px 0}
+.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:10px;padding:8px 12px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none;line-height:1.5}
+.tpl-btn{background:transparent;color:var(--teal);border:1px solid var(--teal);padding:10px 24px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.8px;transition:.2s;white-space:nowrap;text-transform:uppercase}
+.tpl-btn:hover{background:var(--teal);color:var(--bg)}
 </style>
 </head>
 <body>
@@ -311,36 +314,39 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 <div class="container">
   <!-- ── Template Download Panel ── -->
   <div class="tpl-panel">
-    <h3>&#128204; NON HAI UN FILE? SCARICA UN ESEMPIO</h3>
-    <p>Scegli un template, scaricalo, compila con i tuoi dati reali e caricalo sopra.</p>
+    <h3>Download a sample dataset</h3>
+    <p>Choose a ready-made CSV, fill it with your own data, then upload it above. Each file is pre-formatted and immediately usable.</p>
     <div class="tpl-row">
       <select class="tpl-select" id="tplSelect" onchange="updateTplDesc()">
-        <option value="">— Scegli un esempio —</option>
-        <option value="bolletta_elettrica.csv" data-desc="Scopri il costo al kWh dalla tua bolletta elettrica">&#128161; Bolletta elettrica</option>
-        <option value="consumo_benzina.csv" data-desc="Calcola quanto spendi per ogni km percorso">&#128664; Consumo benzina</option>
-        <option value="spesa_supermercato.csv" data-desc="Stima la spesa settimanale in base al numero di persone in casa">&#128717; Spesa supermercato</option>
-        <option value="rata_mutuo.csv" data-desc="Trova la formula della rata mensile del mutuo">&#128179; Rata mutuo</option>
-        <option value="risparmio_mensile.csv" data-desc="Calcola quanto riesci a risparmiare ogni mese">&#128167; Risparmio mensile</option>
-        <option value="stipendio_esperienza.csv" data-desc="Come cresce lo stipendio con gli anni di esperienza">&#128200; Stipendio per esperienza</option>
-        <option value="bmi.csv" data-desc="Indice di massa corporea: formula peso/altezza&#178;">&#9878; BMI</option>
-        <option value="calorie_camminata.csv" data-desc="Calorie bruciate camminando in base a peso e distanza">&#128293; Calorie camminando</option>
-        <option value="media_voti.csv" data-desc="Calcola la media scolastica da voti e materie">&#128218; Media voti</option>
-        <option value="studio_vs_voto.csv" data-desc="Quanto studio serve per ottenere un buon voto?">&#9201; Studio vs Voto</option>
-        <option value="consumo_acqua.csv" data-desc="Litri d&#39;acqua consumati per numero di persone in casa">&#128167; Consumo acqua</option>
-        <option value="gas_riscaldamento.csv" data-desc="Consumo di gas in inverno in base alla temperatura esterna">&#127777; Gas riscaldamento</option>
-              <option value="" disabled>── Scienza &amp; Tecnica ──</option>
-        <option value="newton.csv" data-desc="Seconda legge di Newton: F = m × a">&#9881; Fisica — Legge di Newton (F=ma)</option>
-        <option value="energia_cinetica.csv" data-desc="Energia cinetica: E = ½ × m × v²">&#9889; Fisica — Energia cinetica</option>
-        <option value="gas_ideale.csv" data-desc="Gas ideale semplificato: P × V = costante × T">&#127776; Fisica — Gas ideale (PV=nRT)</option>
-        <option value="caduta_libera.csv" data-desc="Caduta libera: h = ½ × g × t²">&#127773; Fisica — Caduta libera</option>
-        <option value="interesse_composto.csv" data-desc="Interesse composto: V = C × (1 + r)^t">&#128176; Finanza — Interesse composto</option>
-        <option value="legge_ohm.csv" data-desc="Legge di Ohm: V = I × R">&#9889; Elettronica — Legge di Ohm</option>
-        <option value="potenza_elettrica.csv" data-desc="Potenza elettrica: P = V × I">&#128268; Elettronica — Potenza elettrica</option>
-        <option value="stima_immobiliare.csv" data-desc="Stima del prezzo immobiliare: regressione multivariabile">&#127968; Immobiliare — Stima prezzo</option>
-        <option value="dose_farmaco.csv" data-desc="Dose del farmaco proporzionale al peso corporeo">&#128138; Medicina — Dose farmaco</option>
-        <option value="ph_soluzione.csv" data-desc="pH di una soluzione: pH = -log[H+]">&#9878; Chimica — pH soluzione</option>
-        <option value="velocita_suono.csv" data-desc="Velocità del suono in aria al variare della temperatura">&#127926; Acustica — Velocità del suono</option>
-        <option value="crescita_batterica.csv" data-desc="Crescita batterica esponenziale: N = N0 × e^(k×t)">&#129440; Biologia — Crescita batterica</option>
+        <option value="">Select a dataset template&hellip;</option>
+        <optgroup label="Everyday Life">
+          <option value="bolletta_elettrica.csv"    data-desc="Discover the cost per kWh from your electricity bill.">Electricity Bill</option>
+          <option value="consumo_benzina.csv"       data-desc="Calculate how much you spend per kilometre driven.">Fuel Consumption</option>
+          <option value="spesa_supermercato.csv"    data-desc="Estimate weekly grocery spend based on household size.">Grocery Spending</option>
+          <option value="rata_mutuo.csv"            data-desc="Approximate monthly mortgage payment from loan amount and term.">Mortgage Payment</option>
+          <option value="risparmio_mensile.csv"     data-desc="How much you can save each month after fixed and variable costs.">Monthly Savings</option>
+          <option value="stipendio_esperienza.csv"  data-desc="How salary grows with years of professional experience.">Salary vs Experience</option>
+          <option value="bmi.csv"                   data-desc="Body Mass Index: BMI = weight / height&sup2;.">Body Mass Index (BMI)</option>
+          <option value="calorie_camminata.csv"     data-desc="Calories burned walking based on body weight and distance.">Calories — Walking</option>
+          <option value="media_voti.csv"            data-desc="Calculate grade averages from subject scores.">Grade Average</option>
+          <option value="studio_vs_voto.csv"        data-desc="How study hours per week correlate with exam results.">Study Hours vs Grade</option>
+          <option value="consumo_acqua.csv"         data-desc="Household water consumption based on number of residents.">Water Consumption</option>
+          <option value="gas_riscaldamento.csv"     data-desc="Gas consumption in winter based on outside temperature.">Heating Gas Usage</option>
+        </optgroup>
+        <optgroup label="Science &amp; Engineering">
+          <option value="newton.csv"              data-desc="Newton&rsquo;s second law: Force = mass &times; acceleration (F = ma).">Physics — Newton&rsquo;s Second Law</option>
+          <option value="energia_cinetica.csv"    data-desc="Kinetic energy: E = &frac12; &times; mass &times; velocity&sup2;.">Physics — Kinetic Energy</option>
+          <option value="gas_ideale.csv"          data-desc="Ideal gas law: P &times; V = n &times; R &times; T.">Physics — Ideal Gas Law</option>
+          <option value="caduta_libera.csv"       data-desc="Free fall: height = &frac12; &times; g &times; time&sup2;.">Physics — Free Fall</option>
+          <option value="interesse_composto.csv"  data-desc="Compound interest: V = C &times; (1 + r)^t.">Finance — Compound Interest</option>
+          <option value="legge_ohm.csv"           data-desc="Ohm&rsquo;s law: Voltage = Current &times; Resistance (V = IR).">Electronics — Ohm&rsquo;s Law</option>
+          <option value="potenza_elettrica.csv"   data-desc="Electrical power: P = Voltage &times; Current.">Electronics — Electrical Power</option>
+          <option value="stima_immobiliare.csv"   data-desc="Property price estimation using area, floor and distance from centre.">Real Estate — Price Estimate</option>
+          <option value="dose_farmaco.csv"        data-desc="Drug dosage proportional to patient body weight.">Medicine — Drug Dosage</option>
+          <option value="ph_soluzione.csv"        data-desc="pH of a solution: pH = &minus;log[H&plus;].">Chemistry — pH</option>
+          <option value="velocita_suono.csv"      data-desc="Speed of sound in air as a function of temperature.">Acoustics — Speed of Sound</option>
+          <option value="crescita_batterica.csv"  data-desc="Exponential bacterial growth: N = N&sub0; &times; e^(k&times;t).">Biology — Bacterial Growth</option>
+        </optgroup>
       </select>
       <button class="tpl-btn" onclick="downloadTemplate()">&#8681; Scarica template</button>
     </div>
@@ -896,7 +902,7 @@ var TEMPLATE_DATA = {
   "media_voti.csv": "num_materie,somma_voti,media\n5,38,7.6\n6,48,8.0\n8,56,7.0\n7,63,9.0\n4,32,8.0\n9,72,8.0",
   "studio_vs_voto.csv": "ore_studio_settimana,voto_esame\n2,5.0\n5,6.5\n8,7.5\n12,8.5\n15,9.0\n18,9.5\n20,10.0",
   "consumo_acqua.csv": "persone_casa,giorni,litri_consumati\n1,30,1500\n2,30,2800\n3,30,4000\n4,30,5100\n5,30,6200\n6,30,7200",
-  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n5,8,2.5\n2,10,3.8\n0,12,5.0\n-3,14,7.2\n-5,16,9.5\n-8,18,12.0",
+  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n10,6,1.3\n8,7,1.6\n5,8,2.1\n3,10,2.6\n0,12,3.6\n-2,13,4.2\n-5,15,5.2\n-7,16,5.9\n-10,18,7.0\n-12,19,7.8",
   "newton.csv": "massa_kg,accelerazione_ms2,forza_N\n1,10,10\n2,10,20\n3,5,15\n5,5,25\n10,10,100\n7,3,21",
   "energia_cinetica.csv": "massa_kg,velocita_ms,energia_J\n1,2,2\n2,3,9\n1,4,8\n3,2,6\n2,5,25\n4,3,18",
   "gas_ideale.csv": "pressione_Pa,volume_m3,temperatura_K\n101325,0.0224,273\n202650,0.0112,273\n101325,0.0448,546\n50662,0.0448,273\n303975,0.0075,273",
