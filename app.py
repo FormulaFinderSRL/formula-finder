@@ -123,11 +123,15 @@ def make_chart_b64(X_dict,y_true,model=None):
     except Exception:
         return ""
 
-HTML_PAGE = '''<!DOCTYPE html>
-<html lang='en'>
+# ============================================================
+# HTML PAGE — upload fix: usa <label> nativo invece di JS .click()
+# Funziona su Chrome/Mac/Safari/Firefox senza alcun workaround
+# ============================================================
+HTML_PAGE = r"""<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset='UTF-8'>
-<meta name='viewport' content='width=device-width,initial-scale=1'>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Formula Finder</title>
 <style>
 :root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
@@ -140,13 +144,32 @@ header span{font-size:.75rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-zone{border:2px dashed var(--teal);border-radius:12px;padding:48px;text-align:center;background:var(--card);margin-bottom:28px;transition:.2s}
 .upload-zone.dragover{border-color:var(--neon);background:#1a2f4a}
 .upload-zone h2{color:var(--teal);margin-bottom:8px}
-.upload-zone p{color:var(--silver);font-size:.9rem}
-.upload-btn{display:inline-block;margin-top:18px;background:var(--teal);color:var(--bg);border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem}
-.upload-btn:hover{background:var(--neon)}
+.upload-zone p{color:var(--silver);font-size:.9rem;margin-top:8px}
+
+/* === FIX CHIAVE: input nascosto + label styled come bottone === */
+/* Il label e' collegato all'input via for/id: il click sul label  */
+/* apre nativamente il file picker senza nessun JS, funziona       */
+/* su tutti i browser incluso Chrome su Mac                        */
+#fi { display:none; }
+.upload-label {
+  display:inline-block;
+  margin-top:18px;
+  background:var(--teal);
+  color:var(--bg);
+  border:none;
+  padding:10px 28px;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:700;
+  font-size:1rem;
+  transition:.2s;
+}
+.upload-label:hover{background:var(--neon)}
+
 .col-select{display:none;background:var(--card);border-radius:12px;padding:24px;margin-bottom:24px;border:1px solid var(--teal)}
 .col-select h3{color:var(--teal);margin-bottom:16px;letter-spacing:1px}
 .col-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
-label{color:var(--silver);font-size:.85rem;display:block;margin-bottom:4px}
+label.col-label{color:var(--silver);font-size:.85rem;display:block;margin-bottom:4px}
 select{background:var(--mid);color:var(--white);border:1px solid var(--teal);border-radius:6px;padding:8px 12px;font-size:.9rem}
 .run-btn{background:var(--neon);color:var(--bg);border:none;padding:12px 36px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:12px;letter-spacing:1px}
 .run-btn:hover{background:var(--teal);color:#fff}
@@ -179,56 +202,80 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
 </style>
 </head>
 <body>
-<header><h1>FORMULA FINDER</h1><span>Powered by EML + Adam</span></header>
-<div class='container'>
-  <div class='upload-zone' id='dropZone'>
+<header>
+  <h1>FORMULA FINDER</h1>
+  <span>Powered by EML + Adam</span>
+</header>
+<div class="container">
+
+  <div class="upload-zone" id="dropZone">
     <h2>Drop your CSV file here</h2>
-    <p>or click the button below</p>
-    <input type='file' id='fi' accept='.csv' style='display:none'>
-    <button type='button' class='upload-btn' id='chooseBtn'>Choose File</button>
-    <p id='fn' style='margin-top:12px;color:var(--neon);font-weight:600'></p>
+    <p>or click the button below to choose a file</p>
+
+    <!-- INPUT nascosto + LABEL nativa: zero JS, funziona su tutti i browser -->
+    <input type="file" id="fi" accept=".csv">
+    <label for="fi" class="upload-label">&#128193; Choose File</label>
+
+    <p id="fn" style="margin-top:14px;color:var(--neon);font-weight:600;min-height:24px"></p>
   </div>
-  <div class='col-select' id='colSel'>
+
+  <div class="col-select" id="colSel">
     <h3>CONFIGURE COLUMNS</h3>
-    <div class='col-row'>
-      <div><label>Target (Y)</label><select id='yCol'></select></div>
-      <div><label>Variables (X) - Ctrl for multiple</label><select id='xCols' multiple style='height:90px'></select></div>
-      <div><label>Method</label><select id='method'>
-        <option value='both'>Both (Quick + Adam)</option>
-        <option value='quick'>Quick only</option>
-        <option value='adam'>Adam only</option>
-      </select></div>
+    <div class="col-row">
+      <div>
+        <label class="col-label">Target (Y)</label>
+        <select id="yCol"></select>
+      </div>
+      <div>
+        <label class="col-label">Variables (X) &mdash; Ctrl/Cmd for multiple</label>
+        <select id="xCols" multiple style="height:90px"></select>
+      </div>
+      <div>
+        <label class="col-label">Method</label>
+        <select id="method">
+          <option value="both">Both (Quick + Adam)</option>
+          <option value="quick">Quick only</option>
+          <option value="adam">Adam only</option>
+        </select>
+      </div>
     </div>
-    <button type='button' class='run-btn' id='runBtn' onclick='run()'>FIND FORMULA</button>
+    <button type="button" class="run-btn" id="runBtn" onclick="run()">FIND FORMULA</button>
   </div>
-  <div class='spinner' id='spin'>Searching... please wait</div>
-  <div class='error-box' id='err' style='display:none'></div>
-  <div class='results' id='res'>
-    <div class='best-box'><h2>BEST FORMULA FOUND</h2><div class='best-formula' id='bf'></div><div class='best-r2' id='br'></div></div>
-    <div class='chart-box'><h3>DASHBOARD</h3><img id='ci' src='' alt='chart'></div>
-    <div class='terms-box'><h3>TOP TERMS (Adam)</h3><div id='tl'></div></div>
-    <div class='cards-grid' id='cg'></div>
+
+  <div class="spinner" id="spin">&#9881; Searching... please wait</div>
+  <div class="error-box" id="err" style="display:none"></div>
+
+  <div class="results" id="res">
+    <div class="best-box">
+      <h2>BEST FORMULA FOUND</h2>
+      <div class="best-formula" id="bf"></div>
+      <div class="best-r2" id="br"></div>
+    </div>
+    <div class="chart-box">
+      <h3>DASHBOARD</h3>
+      <img id="ci" src="" alt="chart">
+    </div>
+    <div class="terms-box">
+      <h3>TOP TERMS (Adam)</h3>
+      <div id="tl"></div>
+    </div>
+    <div class="cards-grid" id="cg"></div>
   </div>
+
 </div>
-<footer>Formula Finder v3.0</footer>
+<footer>Formula Finder v3.1 &mdash; FormulaFinder S.R.L.</footer>
+
 <script>
-var csv=null;
-var fi=document.getElementById('fi');
-var cb=document.getElementById('chooseBtn');
-var dz=document.getElementById('dropZone');
+var csv = null;
+var fi  = document.getElementById('fi');
+var dz  = document.getElementById('dropZone');
 
-// FIX: use setTimeout to trigger file dialog outside the event handler
-// This resolves Chrome on Mac silently blocking programmatic .click() calls
-cb.addEventListener('click', function(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  setTimeout(function() { fi.click(); }, 10);
-});
-
+// Lettura file via change event (scattato dal label nativo — zero workaround)
 fi.addEventListener('change', function() {
-  if (fi.files && fi.files.length > 0) handle(fi.files[0]);
+  if (fi.files && fi.files.length > 0) handleFile(fi.files[0]);
 });
 
+// Drag & Drop
 dz.addEventListener('dragover', function(e) {
   e.preventDefault();
   dz.classList.add('dragover');
@@ -239,136 +286,170 @@ dz.addEventListener('dragleave', function() {
 dz.addEventListener('drop', function(e) {
   e.preventDefault();
   dz.classList.remove('dragover');
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handle(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    handleFile(e.dataTransfer.files[0]);
+  }
 });
 
-function handle(f) {
+function handleFile(f) {
   if (!f) return;
   document.getElementById('fn').textContent = '\u2705 ' + f.name;
-  var r = new FileReader();
-  r.onload = function(ev) { csv = ev.target.result; parseCols(csv); };
-  r.readAsText(f);
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    csv = ev.target.result;
+    parseCols(csv);
+  };
+  reader.readAsText(f);
 }
 
 function parseCols(c) {
-  var h = c.trim().split('\n')[0].split(',').map(function(x) { return x.trim().replace(/"/g,''); });
-  var yE = document.getElementById('yCol'), xE = document.getElementById('xCols');
-  yE.innerHTML = ''; xE.innerHTML = '';
-  h.forEach(function(v, i) {
-    yE.innerHTML += '<option value="' + v + '"' + (i === h.length-1 ? ' selected' : '') + '>' + v + '</option>';
-    xE.innerHTML += '<option value="' + v + '"' + (i < h.length-1 ? ' selected' : '') + '>' + v + '</option>';
+  var header = c.trim().split('\n')[0].split(',').map(function(x) {
+    return x.trim().replace(/"/g, '');
+  });
+  var yE = document.getElementById('yCol');
+  var xE = document.getElementById('xCols');
+  yE.innerHTML = '';
+  xE.innerHTML = '';
+  header.forEach(function(col, i) {
+    var optY = '<option value="' + col + '"' + (i === header.length - 1 ? ' selected' : '') + '>' + col + '</option>';
+    var optX = '<option value="' + col + '"' + (i < header.length - 1 ? ' selected' : '') + '>' + col + '</option>';
+    yE.innerHTML += optY;
+    xE.innerHTML += optX;
   });
   document.getElementById('colSel').style.display = 'block';
 }
 
 async function run() {
-  document.getElementById('spin').style.display = 'block';
-  document.getElementById('res').style.display = 'none';
-  document.getElementById('err').style.display = 'none';
-  document.getElementById('runBtn').disabled = true;
+  document.getElementById('spin').style.display  = 'block';
+  document.getElementById('res').style.display   = 'none';
+  document.getElementById('err').style.display   = 'none';
+  document.getElementById('runBtn').disabled     = true;
+
   var yc = document.getElementById('yCol').value;
   var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o) { return o.value; });
-  var m = document.getElementById('method').value;
+  var m  = document.getElementById('method').value;
+
   try {
     var resp = await fetch('/api/find', {
-      method: 'POST',
+      method:  'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, method: m})
+      body:    JSON.stringify({csv: csv, y_col: yc, x_cols: xc, method: m})
     });
     var d = await resp.json();
     if (!d.success) throw new Error(d.error);
-    show(d);
+    showResults(d);
   } catch(e) {
-    document.getElementById('err').style.display = 'block';
-    document.getElementById('err').textContent = 'Error: ' + e.message;
+    document.getElementById('err').style.display  = 'block';
+    document.getElementById('err').textContent    = 'Error: ' + e.message;
   } finally {
-    document.getElementById('spin').style.display = 'none';
-    document.getElementById('runBtn').disabled = false;
+    document.getElementById('spin').style.display  = 'none';
+    document.getElementById('runBtn').disabled     = false;
   }
 }
 
-function show(d) {
+function showResults(d) {
   document.getElementById('res').style.display = 'block';
-  var b = (d.quick_results && d.quick_results[0]) || {};
-  document.getElementById('bf').textContent = d.adam_formula || b.formula || 'n/a';
-  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2*100).toFixed(4)+'%' : b.accuracy || 'n/a');
+  var best = (d.quick_results && d.quick_results[0]) || {};
+  document.getElementById('bf').textContent = d.adam_formula || best.formula || 'n/a';
+  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2 * 100).toFixed(4) + '%' : best.accuracy || 'n/a');
+
   if (d.chart_b64) document.getElementById('ci').src = 'data:image/png;base64,' + d.chart_b64;
-  var tl = document.getElementById('tl');
+
+  var tl  = document.getElementById('tl');
   tl.innerHTML = '';
   var wts = (d.top_terms || []).map(function(t) { return Math.abs(t.weight); });
-  var mx = wts.length ? Math.max.apply(null, wts) : 1;
+  var mx  = wts.length ? Math.max.apply(null, wts) : 1;
   (d.top_terms || []).forEach(function(t) {
-    var p = Math.min(100, Math.abs(t.weight)/mx*100);
-    tl.innerHTML += '<div class="term-row"><span class="term-name">'+t.term+'</span><div class="term-bar-wrap"><div class="term-bar" style="width:'+p+'%"></div></div><span class="term-w">'+t.weight.toFixed(4)+'</span></div>';
+    var pct = Math.min(100, Math.abs(t.weight) / mx * 100);
+    tl.innerHTML += '<div class="term-row">'
+      + '<span class="term-name">' + t.term + '</span>'
+      + '<div class="term-bar-wrap"><div class="term-bar" style="width:' + pct + '%"></div></div>'
+      + '<span class="term-w">' + t.weight.toFixed(4) + '</span>'
+      + '</div>';
   });
+
   var cg = document.getElementById('cg');
   cg.innerHTML = '';
   (d.quick_results || []).forEach(function(r, i) {
-    var qc = r.quality==='PERFECT'?'qp':r.quality==='GREAT'?'qg':'qb';
-    cg.innerHTML += '<div class="card"><div class="card-rank">#'+(i+1)+'</div><div class="card-formula">'+r.formula+'</div><div class="card-r2 '+qc+'">'+r.quality+' R2='+r.r2.toFixed(6)+' '+r.accuracy+'</div></div>';
+    var cls = r.quality === 'PERFECT' ? 'qp' : r.quality === 'GREAT' ? 'qg' : 'qb';
+    cg.innerHTML += '<div class="card">'
+      + '<div class="card-rank">#' + (i + 1) + '</div>'
+      + '<div class="card-formula">' + r.formula + '</div>'
+      + '<div class="card-r2 ' + cls + '">' + r.quality + ' &nbsp; R\u00B2=' + r.r2.toFixed(6) + ' &nbsp; ' + r.accuracy + '</div>'
+      + '</div>';
   });
 }
 </script>
 </body>
-</html>'''
+</html>"""
+
 
 def create_app():
     from flask import Flask, request, jsonify, Response
     app = Flask(__name__)
-    app.config['MAX_CONTENT_LENGTH'] = 50*1024*1024
+    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
     @app.route('/')
-    def home(): return Response(HTML_PAGE, mimetype='text/html')
+    def home():
+        return Response(HTML_PAGE, mimetype='text/html')
 
     @app.route('/health')
-    def health(): return jsonify({'status':'ok','version':'3.0'})
+    def health():
+        return jsonify({'status': 'ok', 'version': '3.1'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
         try:
-            body=request.get_json()
-            df=pd.read_csv(io.StringIO(body['csv']))
-            X_dict={c:df[c].astype(float).values for c in body['x_cols']}
-            y_data=df[body['y_col']].astype(float).values
-            method=body.get('method','both')
-            result={'success':True}
-            if method in ('quick','both'): result['quick_results']=quick_search(X_dict,y_data,top_n=8)
-            if method in ('adam','both'):
-                model=EMLAdamRegressor(lr=0.05,epochs=1200,l1=5e-4).fit(X_dict,y_data)
-                result['adam_formula']=model.formula(thr=0.05)
-                result['adam_r2']=round(model.r2(X_dict,y_data),6)
-                result['top_terms']=model.top_terms(8)
-                result['chart_b64']=make_chart_b64(X_dict,y_data,model)
-            else: result['chart_b64']=make_chart_b64(X_dict,y_data)
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            method = body.get('method', 'both')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula(thr=0.05)
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(8)
+                result['chart_b64']    = make_chart_b64(X_dict, y_data, model)
+            else:
+                result['chart_b64'] = make_chart_b64(X_dict, y_data)
             return jsonify(result)
-        except Exception as e: return jsonify({'success':False,'error':str(e)}),400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
     @app.route('/api/json', methods=['POST'])
     def api_json():
         try:
-            body=request.get_json()
-            X_dict={k:np.array(v,float) for k,v in body['X'].items()}
-            y_data=np.array(body['y'],float)
-            method=body.get('method','quick')
-            result={'success':True}
-            if method in ('quick','both'): result['quick_results']=quick_search(X_dict,y_data,top_n=8)
-            if method in ('adam','both'):
-                model=EMLAdamRegressor(lr=0.05,epochs=1000,l1=5e-4).fit(X_dict,y_data)
-                result['adam_formula']=model.formula()
-                result['adam_r2']=round(model.r2(X_dict,y_data),6)
-                result['top_terms']=model.top_terms(5)
+            body   = request.get_json()
+            X_dict = {k: np.array(v, float) for k, v in body['X'].items()}
+            y_data = np.array(body['y'], float)
+            method = body.get('method', 'quick')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1000, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula()
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(5)
             return jsonify(result)
-        except Exception as e: return jsonify({'success':False,'error':str(e)}),400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
     return app
+
 
 app = create_app()
 
 if __name__ == '__main__':
     import argparse
-    p=argparse.ArgumentParser()
-    p.add_argument('--port',type=int,default=5000)
-    p.add_argument('--host',default='0.0.0.0')
-    args=p.parse_args()
-    app=create_app()
-    if app: app.run(host=args.host,port=args.port,debug=False)
+    p = argparse.ArgumentParser()
+    p.add_argument('--port', type=int, default=5000)
+    p.add_argument('--host', default='0.0.0.0')
+    args = p.parse_args()
+    app = create_app()
+    if app:
+        app.run(host=args.host, port=args.port, debug=False)
