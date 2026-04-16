@@ -97,41 +97,111 @@ def quick_search(X_dict,y,top_n=8,min_r2=0.5):
 
 def make_chart_b64(X_dict, y_true, model=None):
     try:
-        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-        vlist=list(X_dict.keys()); x_vals=np.asarray(X_dict[vlist[0]],float)
-        y_arr=np.asarray(y_true,float); sidx=np.argsort(x_vals); xs,ys=x_vals[sidx],y_arr[sidx]
-        fig,axes=plt.subplots(1,2,figsize=(12,4)); fig.patch.set_facecolor("#0D1B2A")
-        ax=axes[0]; ax.set_facecolor("#112233")
-        ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
+        import matplotlib; matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        from matplotlib import rcParams
+        rcParams["font.family"] = "DejaVu Sans"
+
+        # ── Palette (Google Material inspired) ──
+        BG        = "#F8F9FA"   # light grey background
+        PANEL     = "#FFFFFF"   # white panel
+        GRID      = "#E8EAED"   # subtle grid
+        DATA_COL  = "#4285F4"   # Google blue  → data points
+        FIT_COL   = "#EA4335"   # Google red   → fit line
+        POS_COL   = "#34A853"   # Google green → positive residuals
+        NEG_COL   = "#EA4335"   # Google red   → negative residuals
+        ZERO_COL  = "#5F6368"   # dark grey    → zero line
+        TEXT_COL  = "#202124"   # near-black
+        SUB_COL   = "#5F6368"   # secondary text
+
+        vlist  = list(X_dict.keys())
+        x_vals = np.asarray(X_dict[vlist[0]], float)
+        y_arr  = np.asarray(y_true, float)
+        sidx   = np.argsort(x_vals)
+        xs, ys = x_vals[sidx], y_arr[sidx]
+
+        fig = plt.figure(figsize=(13, 4.5), facecolor=BG)
+        fig.subplots_adjust(left=0.07, right=0.97, top=0.88, bottom=0.14, wspace=0.32)
+        gs = gridspec.GridSpec(1, 2, figure=fig)
+
+        # ── Left: Data vs Fit ──
+        ax = fig.add_subplot(gs[0])
+        ax.set_facecolor(PANEL)
+        ax.grid(True, color=GRID, linewidth=0.8, zorder=0)
+        for s in ax.spines.values(): s.set_edgecolor(GRID)
+
+        # Data points — slightly transparent, smaller
+        ax.scatter(xs, ys, color=DATA_COL, s=22, alpha=0.75,
+                   label="Observed data", zorder=3, linewidths=0)
+
         if model is not None:
             try:
-                yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_arr)
-                ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label="Fit R\u00B2=%.4f"%r2,zorder=4)
+                yp = model.predict({vlist[0]: xs})
+                r2 = model.r2(X_dict, y_arr)
+                # Fit line — bold, on top, clearly different color
+                ax.plot(xs, yp, color=FIT_COL, lw=2.2,
+                        label="Model fit  R² = %.4f" % r2, zorder=4)
             except: pass
-        ax.set_title("Data vs Fit (%s)"%vlist[0],color="white",fontsize=11)
-        ax.set_xlabel(vlist[0],color="#888"); ax.set_ylabel("y",color="#888")
-        ax.tick_params(colors="#888"); ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
-        for s in ax.spines.values(): s.set_edgecolor("#333355")
-        ax2=axes[1]; ax2.set_facecolor("#112233")
+
+        ax.set_title("Data vs Fit  (%s)" % vlist[0],
+                     color=TEXT_COL, fontsize=11, fontweight="bold", pad=10)
+        ax.set_xlabel(vlist[0], color=SUB_COL, fontsize=9)
+        ax.set_ylabel("y", color=SUB_COL, fontsize=9)
+        ax.tick_params(colors=SUB_COL, labelsize=8)
+        leg = ax.legend(fontsize=8, frameon=True, framealpha=1,
+                        edgecolor=GRID, facecolor=PANEL, labelcolor=TEXT_COL)
+
+        # ── Right: Residuals ──
+        ax2 = fig.add_subplot(gs[1])
+        ax2.set_facecolor(PANEL)
+        ax2.grid(True, color=GRID, linewidth=0.8, zorder=0, axis="y")
+        for s in ax2.spines.values(): s.set_edgecolor(GRID)
+
         if model is not None:
             try:
-                res2=ys-model.predict({vlist[0]:xs}); ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
-                ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--"); ax2.set_title("Residuals",color="white",fontsize=11)
-            except: ax2.set_title("Residuals (unavailable)",color="#888",fontsize=11)
-        else: ax2.set_title("Residuals (no model)",color="#888",fontsize=11)
-        ax2.tick_params(colors="#888")
-        for s in ax2.spines.values(): s.set_edgecolor("#333355")
-        plt.tight_layout(); buf=io.BytesIO()
-        plt.savefig(buf,format="png",dpi=100,bbox_inches="tight",facecolor="#0D1B2A")
-        plt.close(fig); buf.seek(0); data=base64.b64encode(buf.read()).decode(); buf.close(); return data
+                res2 = ys - model.predict({vlist[0]: xs})
+                colors = [POS_COL if v >= 0 else NEG_COL for v in res2]
+                ax2.bar(range(len(res2)), res2, color=colors, alpha=0.85,
+                        width=0.8, zorder=2)
+                ax2.axhline(0, color=ZERO_COL, lw=1.2, ls="-", zorder=3)
+                ax2.set_title("Residuals",
+                              color=TEXT_COL, fontsize=11, fontweight="bold", pad=10)
+                # Small legend for colors
+                from matplotlib.patches import Patch
+                ax2.legend(handles=[
+                    Patch(color=POS_COL, alpha=0.85, label="Positive"),
+                    Patch(color=NEG_COL, alpha=0.85, label="Negative"),
+                ], fontsize=7.5, frameon=True, framealpha=1,
+                   edgecolor=GRID, facecolor=PANEL, labelcolor=TEXT_COL)
+            except:
+                ax2.set_title("Residuals (unavailable)", color=SUB_COL, fontsize=11, pad=10)
+        else:
+            ax2.set_title("Residuals (no model)", color=SUB_COL, fontsize=11, pad=10)
+
+        ax2.tick_params(colors=SUB_COL, labelsize=8)
+        ax2.set_xlabel("Sample index", color=SUB_COL, fontsize=9)
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=BG)
+        plt.close(fig)
+        buf.seek(0)
+        data = base64.b64encode(buf.read()).decode()
+        buf.close()
+        return data
+
     except Exception as ex:
         try:
             import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-            fig2,ax3=plt.subplots(figsize=(6,2)); fig2.patch.set_facecolor("#0D1B2A"); ax3.set_facecolor("#0D1B2A")
-            ax3.text(0.5,0.5,"Chart error: %s"%str(ex),color="#EF4444",ha="center",va="center",transform=ax3.transAxes,fontsize=9)
-            ax3.axis("off"); buf2=io.BytesIO()
-            plt.savefig(buf2,format="png",dpi=80,bbox_inches="tight",facecolor="#0D1B2A")
-            plt.close(fig2); buf2.seek(0); return base64.b64encode(buf2.read()).decode()
+            fig2, ax3 = plt.subplots(figsize=(6, 2))
+            fig2.patch.set_facecolor("#F8F9FA"); ax3.set_facecolor("#F8F9FA")
+            ax3.text(0.5, 0.5, "Chart error: %s" % str(ex),
+                     color="#EA4335", ha="center", va="center",
+                     transform=ax3.transAxes, fontsize=9)
+            ax3.axis("off"); buf2 = io.BytesIO()
+            plt.savefig(buf2, format="png", dpi=80, bbox_inches="tight", facecolor="#F8F9FA")
+            plt.close(fig2); buf2.seek(0)
+            return base64.b64encode(buf2.read()).decode()
         except: return ""
 
 # ─────────────────────────── HTML PAGE ───────────────────────────
@@ -142,73 +212,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Formula Finder</title>
-<script>
-/* Minimal robust CSV parser — handles BOM, quoted fields, auto-detects , ; \t */
-var Papa = (function(){
-  function detectDelim(str) {
-    var s = str.slice(0, 2000);
-    var counts = {',': 0, ';': 0, '\t': 0};
-    var inQ = false;
-    for (var i = 0; i < s.length; i++) {
-      if (s[i] === '"') { inQ = !inQ; continue; }
-      if (!inQ && counts[s[i]] !== undefined) counts[s[i]]++;
-    }
-    var best = ',', max = -1;
-    Object.keys(counts).forEach(function(k){ if(counts[k]>max){max=counts[k];best=k;} });
-    return best;
-  }
-  function parseRows(str, delim) {
-    var rows = [], row = [], cur = '', inQ = false, i = 0;
-    while (i < str.length) {
-      var c = str[i];
-      if (c === '"') {
-        if (inQ && str[i+1] === '"') { cur += '"'; i += 2; continue; }
-        inQ = !inQ; i++; continue;
-      }
-      if (!inQ && c === delim) { row.push(cur); cur = ''; i++; continue; }
-      if (!inQ && (c === '\n' || (c === '\r' && str[i+1] === '\n'))) {
-        row.push(cur); rows.push(row); row = []; cur = '';
-        if (c === '\r') i++;
-        i++; continue;
-      }
-      cur += c; i++;
-    }
-    if (cur || row.length) { row.push(cur); rows.push(row); }
-    return rows;
-  }
-  return {
-    parse: function(file, opts) {
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          var raw = e.target.result.replace(/^\uFEFF/, '');
-          var delim = detectDelim(raw);
-          var rows = parseRows(raw.trim(), delim);
-          if (rows.length < 2) { opts.error && opts.error({message:'No data rows found'}); return; }
-          var fields = rows[0].map(function(f){ return f.trim(); });
-          var data = [];
-          for (var i = 1; i < rows.length; i++) {
-            if (rows[i].length === 1 && rows[i][0] === '') continue;
-            var obj = {};
-            fields.forEach(function(f, j){ obj[f] = (rows[i][j] || '').trim(); });
-            data.push(obj);
-          }
-          opts.complete && opts.complete({data:data, meta:{fields:fields, delimiter:delim}});
-        } catch(ex) { opts.error && opts.error({message: String(ex)}); }
-      };
-      reader.onerror = function(){ opts.error && opts.error({message:'FileReader error'}); };
-      reader.readAsText(file);
-    },
-    unparse: function(data) {
-      if (!data || !data.length) return '';
-      var fields = Object.keys(data[0]);
-      var lines = [fields.join(',')];
-      data.forEach(function(r){ lines.push(fields.map(function(f){ return r[f]||''; }).join(',')); });
-      return lines.join('\n');
-    }
-  };
-})();
-</script>
+<!-- PapaParse: robust CSV parsing (handles quotes, BOM, semicolons) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
 :root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -242,14 +247,21 @@ header span{font-size:.72rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-label:hover{background:var(--neon)}
 #fn{margin-top:12px;color:var(--neon);font-weight:600;min-height:22px;font-size:.9rem}
 
-/* ── CSV mini-preview ── */
-.preview-box{display:none;background:var(--mid);border:1px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:20px;overflow-x:auto}
-.preview-box h4{color:var(--teal);font-size:.78rem;letter-spacing:1px;margin-bottom:10px}
-.preview-table{border-collapse:collapse;font-size:.75rem;width:100%}
-.preview-table th{background:#0d1b2a;color:var(--neon);padding:5px 10px;text-align:left;border-bottom:1px solid #1e3a5f}
-.preview-table td{color:var(--silver);padding:4px 10px;border-bottom:1px solid #162840}
-.preview-table tr:last-child td{border-bottom:none}
-.preview-meta{font-size:.72rem;color:var(--silver);margin-top:8px;opacity:.7}
+/* ── File stat badge ── */
+.file-stat{display:none;margin-bottom:20px;padding:12px 18px;background:var(--card);border:1px solid #1e3a5f;border-radius:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
+.file-stat.ok{border-left:3px solid var(--neon)}
+.file-stat.warn{border-left:3px solid var(--amber)}
+.file-stat.err{border-left:3px solid var(--red)}
+.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.stat-dot.ok{background:var(--neon)}
+.stat-dot.warn{background:var(--amber)}
+.stat-dot.err{background:var(--red)}
+.stat-text{font-size:.82rem;color:var(--silver);flex:1}
+.stat-text strong{color:var(--white)}
+.stat-tags{display:flex;gap:6px;flex-wrap:wrap}
+.stat-tag{font-size:.7rem;padding:2px 9px;border-radius:20px;background:var(--mid);color:var(--silver);border:1px solid #1e3a5f}
+.stat-tag.hi{color:var(--neon);border-color:rgba(6,214,160,.3)}
+.stat-tag.wa{color:var(--amber);border-color:rgba(252,211,77,.3)}
 
 /* ── Configure columns ── */
 .col-select{display:none;background:var(--card);border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid var(--teal)}
@@ -392,11 +404,11 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <p id="fn"></p>
   </div>
 
-  <!-- ── CSV mini-preview ── -->
-  <div class="preview-box" id="previewBox">
-    <h4>FILE PREVIEW</h4>
-    <div id="previewTable"></div>
-    <div class="preview-meta" id="previewMeta"></div>
+  <!-- ── File stat badge ── -->
+  <div class="file-stat" id="fileStat">
+    <span class="stat-dot" id="statDot"></span>
+    <span class="stat-text" id="statText"></span>
+    <div class="stat-tags" id="statTags"></div>
   </div>
 
   <!-- ── Configure Columns ── -->
@@ -459,7 +471,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   </div>
 
 </div>
-<footer>FormulaFinder &mdash; undoubtedly created by surely not A.G.</footer>
+<footer>FormulaFinder (surely created by not G.)</footer>
 
 <script>
 var csv            = null;
@@ -529,7 +541,7 @@ function showPreview(result) {
   html += '</tbody></table>';
   wrap.innerHTML = html;
   meta.textContent = result.data.length + ' rows \u00B7 ' + cols.length + ' columns detected' +
-    (result.meta.delimiter !== ',' ? '  \u26a0\ufe0f Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
+    (result.meta.delimiter !== ',' ? '  Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
   box.style.display = 'block';
 }
 
@@ -759,7 +771,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '4.0'})
+        return jsonify({'status': 'ok', 'version': '4.1'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
