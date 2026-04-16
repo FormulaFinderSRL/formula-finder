@@ -86,47 +86,93 @@ def quick_search(X_dict,y,top_n=8,min_r2=0.5):
         except: pass
     res.sort(key=lambda d:d["r2"],reverse=True); return res[:top_n]
 
-def make_chart_b64(X_dict,y_true,model=None):
+def make_chart_b64(X_dict, y_true, model=None):
+    """
+    Genera grafico base64. Usa solo la prima variabile X sull'asse X.
+    Robusto: non crasha mai, restituisce stringa vuota in caso di errore.
+    """
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        fig,axes=plt.subplots(1,2,figsize=(12,4))
+
+        vlist = list(X_dict.keys())
+        x_vals = np.asarray(X_dict[vlist[0]], float)
+        y_arr  = np.asarray(y_true, float)
+        sidx   = np.argsort(x_vals)
+        xs, ys = x_vals[sidx], y_arr[sidx]
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
         fig.patch.set_facecolor("#0D1B2A")
-        vlist=list(X_dict.keys())
-        x_vals=np.asarray(X_dict[vlist[0]],float)
-        y_true=np.asarray(y_true,float)
-        sidx=np.argsort(x_vals); xs,ys=x_vals[sidx],y_true[sidx]
-        ax=axes[0]; ax.set_facecolor("#112233")
-        ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
-        if model:
-            yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_true)
-            ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label="Fit R2=%.4f" % r2,zorder=4)
-        ax.set_title("Data vs Fit",color="white",fontsize=11)
+
+        # --- Pannello sinistro: Data vs Fit ---
+        ax = axes[0]
+        ax.set_facecolor("#112233")
+        ax.scatter(xs, ys, color="#00e5ff", s=25, alpha=0.7, label="Data", zorder=5)
+        if model is not None:
+            try:
+                yp = model.predict({vlist[0]: xs})
+                r2 = model.r2(X_dict, y_arr)
+                ax.plot(xs, yp, color="#ff6b6b", lw=2.5,
+                        label="Fit R\u00B2=%.4f" % r2, zorder=4)
+            except Exception:
+                pass
+        ax.set_title("Data vs Fit (%s)" % vlist[0], color="white", fontsize=11)
+        ax.set_xlabel(vlist[0], color="#888")
+        ax.set_ylabel("y", color="#888")
         ax.tick_params(colors="#888")
-        ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
+        ax.legend(facecolor="#1a1a2e", labelcolor="white", fontsize=8)
         for s in ax.spines.values(): s.set_edgecolor("#333355")
-        ax2=axes[1]; ax2.set_facecolor("#112233")
-        if model:
-            res2=ys-model.predict({vlist[0]:xs})
-            ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
-            ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--")
-            ax2.set_title("Residuals",color="white",fontsize=11)
+
+        # --- Pannello destro: Residui ---
+        ax2 = axes[1]
+        ax2.set_facecolor("#112233")
+        if model is not None:
+            try:
+                res2 = ys - model.predict({vlist[0]: xs})
+                ax2.bar(range(len(res2)), res2, color="#1B9AAA", alpha=0.7)
+                ax2.axhline(0, color="#ff6b6b", lw=1.5, ls="--")
+                ax2.set_title("Residuals", color="white", fontsize=11)
+            except Exception:
+                ax2.set_title("Residuals (unavailable)", color="#888", fontsize=11)
+        else:
+            ax2.set_title("Residuals (no model)", color="#888", fontsize=11)
         ax2.tick_params(colors="#888")
         for s in ax2.spines.values(): s.set_edgecolor("#333355")
-        plt.tight_layout()
-        buf=io.BytesIO()
-        plt.savefig(buf,format="png",dpi=100,bbox_inches="tight",facecolor="#0D1B2A")
-        plt.close()
-        buf.seek(0)
-        return base64.b64encode(buf.read()).decode()
-    except Exception:
-        return ""
 
-# ============================================================
-# HTML PAGE — upload fix: usa <label> nativo invece di JS .click()
-# Funziona su Chrome/Mac/Safari/Firefox senza alcun workaround
-# ============================================================
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=100,
+                    bbox_inches="tight", facecolor="#0D1B2A")
+        plt.close(fig)
+        buf.seek(0)
+        data = base64.b64encode(buf.read()).decode()
+        buf.close()
+        return data
+
+    except Exception as ex:
+        # Genera un'immagine di errore minimale invece di restituire ""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig2, ax3 = plt.subplots(figsize=(6, 2))
+            fig2.patch.set_facecolor("#0D1B2A")
+            ax3.set_facecolor("#0D1B2A")
+            ax3.text(0.5, 0.5, "Chart error: %s" % str(ex),
+                     color="#EF4444", ha="center", va="center",
+                     transform=ax3.transAxes, fontsize=9)
+            ax3.axis("off")
+            buf2 = io.BytesIO()
+            plt.savefig(buf2, format="png", dpi=80,
+                        bbox_inches="tight", facecolor="#0D1B2A")
+            plt.close(fig2)
+            buf2.seek(0)
+            return base64.b64encode(buf2.read()).decode()
+        except Exception:
+            return ""
+
+
 HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -145,58 +191,43 @@ header span{font-size:.75rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-zone.dragover{border-color:var(--neon);background:#1a2f4a}
 .upload-zone h2{color:var(--teal);margin-bottom:8px}
 .upload-zone p{color:var(--silver);font-size:.9rem;margin-top:8px}
-
-/* === FIX CHIAVE: input nascosto + label styled come bottone === */
-/* Il label e' collegato all'input via for/id: il click sul label  */
-/* apre nativamente il file picker senza nessun JS, funziona       */
-/* su tutti i browser incluso Chrome su Mac                        */
-#fi { display:none; }
-.upload-label {
-  display:inline-block;
-  margin-top:18px;
-  background:var(--teal);
-  color:var(--bg);
-  border:none;
-  padding:10px 28px;
-  border-radius:6px;
-  cursor:pointer;
-  font-weight:700;
-  font-size:1rem;
-  transition:.2s;
-}
+#fi{display:none}
+.upload-label{display:inline-block;margin-top:18px;background:var(--teal);color:var(--bg);border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem;transition:.2s}
 .upload-label:hover{background:var(--neon)}
-
 .col-select{display:none;background:var(--card);border-radius:12px;padding:24px;margin-bottom:24px;border:1px solid var(--teal)}
 .col-select h3{color:var(--teal);margin-bottom:16px;letter-spacing:1px}
-.col-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
-label.col-label{color:var(--silver);font-size:.85rem;display:block;margin-bottom:4px}
-select{background:var(--mid);color:var(--white);border:1px solid var(--teal);border-radius:6px;padding:8px 12px;font-size:.9rem}
-.run-btn{background:var(--neon);color:var(--bg);border:none;padding:12px 36px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:12px;letter-spacing:1px}
+.col-row{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-start}
+.col-group{display:flex;flex-direction:column;gap:4px}
+.col-group label{color:var(--silver);font-size:.82rem;font-weight:600;letter-spacing:.5px}
+select{background:var(--mid);color:var(--white);border:1px solid var(--teal);border-radius:6px;padding:8px 12px;font-size:.9rem;min-width:140px}
+.hint{font-size:.75rem;color:var(--silver);margin-top:3px;opacity:.7}
+.run-btn{background:var(--neon);color:var(--bg);border:none;padding:12px 36px;border-radius:6px;cursor:pointer;font-weight:700;font-size:1rem;margin-top:8px;letter-spacing:1px}
 .run-btn:hover{background:var(--teal);color:#fff}
 .run-btn:disabled{opacity:.5;cursor:not-allowed}
 .spinner{display:none;text-align:center;padding:40px;color:var(--teal);font-size:1.1rem}
 .results{display:none}
 .best-box{background:linear-gradient(135deg,var(--teal),#0d7a85);border-radius:12px;padding:24px 28px;margin-bottom:24px}
 .best-box h2{font-size:.85rem;letter-spacing:3px;color:var(--bg);margin-bottom:8px}
-.best-formula{font-size:1.4rem;font-weight:700;color:var(--bg);font-family:monospace;margin-bottom:6px;word-break:break-all}
+.best-formula{font-size:1.3rem;font-weight:700;color:var(--bg);font-family:monospace;margin-bottom:6px;word-break:break-all}
 .best-r2{font-size:.95rem;color:rgba(0,0,0,.65)}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px}
 .card{background:var(--card);border:1px solid #1e3a5f;border-radius:10px;padding:18px;transition:.2s}
 .card:hover{border-color:var(--teal)}
 .card-rank{font-size:.75rem;color:var(--silver);letter-spacing:1px}
-.card-formula{font-family:monospace;font-size:.95rem;color:var(--white);margin:6px 0;word-break:break-all}
-.card-r2{font-size:.85rem}
+.card-formula{font-family:monospace;font-size:.9rem;color:var(--white);margin:6px 0;word-break:break-all}
+.card-r2{font-size:.82rem}
 .qp{color:var(--neon)}.qg{color:#06D6A0}.qb{color:var(--amber)}
 .chart-box{background:var(--card);border-radius:12px;padding:20px;margin-bottom:24px;border:1px solid #1e3a5f}
 .chart-box h3{color:var(--teal);margin-bottom:14px;letter-spacing:1px}
-.chart-box img{width:100%;border-radius:8px}
+.chart-box img{width:100%;border-radius:8px;display:block}
+.chart-err{color:var(--red);font-size:.9rem;padding:12px 0}
 .terms-box{background:var(--card);border-radius:12px;padding:20px;margin-bottom:24px;border:1px solid #1e3a5f}
 .terms-box h3{color:var(--teal);margin-bottom:14px}
 .term-row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #1e3a5f}
-.term-name{font-family:monospace;color:var(--white);min-width:120px}
+.term-name{font-family:monospace;color:var(--white);min-width:140px;font-size:.85rem}
 .term-bar-wrap{flex:1;margin:0 16px;height:8px;background:#1e3a5f;border-radius:4px;overflow:hidden}
 .term-bar{height:100%;background:var(--teal);border-radius:4px;transition:.5s}
-.term-w{color:var(--amber);font-size:.85rem;min-width:70px;text-align:right}
+.term-w{color:var(--amber);font-size:.82rem;min-width:80px;text-align:right}
 .error-box{background:#2a1018;border:1px solid var(--red);border-radius:10px;padding:16px;color:var(--red);margin-bottom:16px}
 footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border-top:1px solid #1e3a5f;margin-top:40px}
 </style>
@@ -211,35 +242,35 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
   <div class="upload-zone" id="dropZone">
     <h2>Drop your CSV file here</h2>
     <p>or click the button below to choose a file</p>
-
-    <!-- INPUT nascosto + LABEL nativa: zero JS, funziona su tutti i browser -->
     <input type="file" id="fi" accept=".csv">
     <label for="fi" class="upload-label">&#128193; Choose File</label>
-
     <p id="fn" style="margin-top:14px;color:var(--neon);font-weight:600;min-height:24px"></p>
   </div>
 
   <div class="col-select" id="colSel">
     <h3>CONFIGURE COLUMNS</h3>
     <div class="col-row">
-      <div>
-        <label class="col-label">Target (Y)</label>
+      <div class="col-group">
+        <label>&#127919; Target Y (dipendente)</label>
         <select id="yCol"></select>
+        <span class="hint">La variabile da predire</span>
       </div>
-      <div>
-        <label class="col-label">Variables (X) &mdash; Ctrl/Cmd for multiple</label>
-        <select id="xCols" multiple style="height:90px"></select>
+      <div class="col-group">
+        <label>&#128200; Variables X (indipendenti)</label>
+        <select id="xCols" multiple style="height:110px"></select>
+        <span class="hint">Tieni Cmd/Ctrl per selezionarne pi&ugrave;</span>
       </div>
-      <div>
-        <label class="col-label">Method</label>
+      <div class="col-group">
+        <label>&#9881; Method</label>
         <select id="method">
           <option value="both">Both (Quick + Adam)</option>
           <option value="quick">Quick only</option>
           <option value="adam">Adam only</option>
         </select>
+        <span class="hint">Both = pi&ugrave; accurato</span>
       </div>
     </div>
-    <button type="button" class="run-btn" id="runBtn" onclick="run()">FIND FORMULA</button>
+    <button type="button" class="run-btn" id="runBtn" onclick="run()">&#128269; FIND FORMULA</button>
   </div>
 
   <div class="spinner" id="spin">&#9881; Searching... please wait</div>
@@ -253,94 +284,105 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border
     </div>
     <div class="chart-box">
       <h3>DASHBOARD</h3>
-      <img id="ci" src="" alt="chart">
+      <div id="chartWrap"></div>
     </div>
     <div class="terms-box">
-      <h3>TOP TERMS (Adam)</h3>
+      <h3>TOP TERMS (Adam weights)</h3>
       <div id="tl"></div>
     </div>
     <div class="cards-grid" id="cg"></div>
   </div>
 
 </div>
-<footer>Formula Finder v3.1 &mdash; FormulaFinder S.R.L.</footer>
+<footer>Formula Finder v3.2 &mdash; FormulaFinder S.R.L.</footer>
 
 <script>
 var csv = null;
-var fi  = document.getElementById('fi');
-var dz  = document.getElementById('dropZone');
+var parsedCols = [];
+var fi = document.getElementById('fi');
+var dz = document.getElementById('dropZone');
 
-// Lettura file via change event (scattato dal label nativo — zero workaround)
+// Upload via label nativa (zero JS per aprire il picker)
 fi.addEventListener('change', function() {
   if (fi.files && fi.files.length > 0) handleFile(fi.files[0]);
 });
 
 // Drag & Drop
-dz.addEventListener('dragover', function(e) {
-  e.preventDefault();
-  dz.classList.add('dragover');
-});
-dz.addEventListener('dragleave', function() {
-  dz.classList.remove('dragover');
-});
-dz.addEventListener('drop', function(e) {
-  e.preventDefault();
-  dz.classList.remove('dragover');
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    handleFile(e.dataTransfer.files[0]);
-  }
+dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', function(){ dz.classList.remove('dragover'); });
+dz.addEventListener('drop', function(e){
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
 });
 
 function handleFile(f) {
   if (!f) return;
   document.getElementById('fn').textContent = '\u2705 ' + f.name;
   var reader = new FileReader();
-  reader.onload = function(ev) {
-    csv = ev.target.result;
-    parseCols(csv);
-  };
+  reader.onload = function(ev) { csv = ev.target.result; parseCols(csv); };
   reader.readAsText(f);
 }
 
 function parseCols(c) {
-  var header = c.trim().split('\n')[0].split(',').map(function(x) {
-    return x.trim().replace(/"/g, '');
-  });
+  // Rimuove BOM e whitespace, supporta \r\n e \n
+  var firstLine = c.replace(/^\uFEFF/, '').trim().split(/\r?\n/)[0];
+  parsedCols = firstLine.split(',').map(function(x){ return x.trim().replace(/^"|"$/g,''); });
+
   var yE = document.getElementById('yCol');
   var xE = document.getElementById('xCols');
   yE.innerHTML = '';
   xE.innerHTML = '';
-  header.forEach(function(col, i) {
-    var optY = '<option value="' + col + '"' + (i === header.length - 1 ? ' selected' : '') + '>' + col + '</option>';
-    var optX = '<option value="' + col + '"' + (i < header.length - 1 ? ' selected' : '') + '>' + col + '</option>';
-    yE.innerHTML += optY;
-    xE.innerHTML += optX;
+
+  // Euristica: l'ultima colonna va in Y, le altre in X
+  // MA: se una colonna si chiama 'y' o 'Y' o 'target' o 'output', quella viene messa in Y
+  var yHints = ['y','Y','target','output','result','out','label','response'];
+  var guessedY = parsedCols.length - 1; // default: ultima colonna
+  for (var i = 0; i < parsedCols.length; i++) {
+    if (yHints.indexOf(parsedCols[i]) !== -1) { guessedY = i; break; }
+  }
+
+  parsedCols.forEach(function(col, i) {
+    var optY = document.createElement('option');
+    optY.value = col; optY.textContent = col;
+    if (i === guessedY) optY.selected = true;
+    yE.appendChild(optY);
+
+    var optX = document.createElement('option');
+    optX.value = col; optX.textContent = col;
+    if (i !== guessedY) optX.selected = true; // pre-seleziona tutte le non-Y
+    xE.appendChild(optX);
   });
+
   document.getElementById('colSel').style.display = 'block';
 }
 
 async function run() {
+  // Validazione
+  var yc = document.getElementById('yCol').value;
+  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
+  if (!csv) { alert('Carica prima un file CSV!'); return; }
+  if (xc.length === 0) { alert('Seleziona almeno una variabile X!'); return; }
+  if (xc.indexOf(yc) !== -1) { alert('Attenzione: Y \u00e8 incluso nelle X. Rimuovilo dalla lista X!'); return; }
+
   document.getElementById('spin').style.display  = 'block';
   document.getElementById('res').style.display   = 'none';
   document.getElementById('err').style.display   = 'none';
   document.getElementById('runBtn').disabled     = true;
 
-  var yc = document.getElementById('yCol').value;
-  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o) { return o.value; });
-  var m  = document.getElementById('method').value;
+  var m = document.getElementById('method').value;
 
   try {
     var resp = await fetch('/api/find', {
-      method:  'POST',
+      method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({csv: csv, y_col: yc, x_cols: xc, method: m})
+      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, method: m})
     });
     var d = await resp.json();
     if (!d.success) throw new Error(d.error);
     showResults(d);
   } catch(e) {
     document.getElementById('err').style.display  = 'block';
-    document.getElementById('err').textContent    = 'Error: ' + e.message;
+    document.getElementById('err').textContent    = '\u274c Error: ' + e.message;
   } finally {
     document.getElementById('spin').style.display  = 'none';
     document.getElementById('runBtn').disabled     = false;
@@ -351,14 +393,32 @@ function showResults(d) {
   document.getElementById('res').style.display = 'block';
   var best = (d.quick_results && d.quick_results[0]) || {};
   document.getElementById('bf').textContent = d.adam_formula || best.formula || 'n/a';
-  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2 * 100).toFixed(4) + '%' : best.accuracy || 'n/a');
+  document.getElementById('br').textContent = 'Accuracy: ' +
+    (d.adam_r2 ? (d.adam_r2 * 100).toFixed(4) + '%' : best.accuracy || 'n/a');
 
-  if (d.chart_b64) document.getElementById('ci').src = 'data:image/png;base64,' + d.chart_b64;
+  // Chart — robusto
+  var cw = document.getElementById('chartWrap');
+  cw.innerHTML = '';
+  if (d.chart_b64 && d.chart_b64.length > 100) {
+    var img = document.createElement('img');
+    img.src = 'data:image/png;base64,' + d.chart_b64;
+    img.alt = 'Dashboard chart';
+    img.style.width = '100%';
+    img.style.borderRadius = '8px';
+    img.onerror = function(){ cw.innerHTML = '<p class="chart-err">\u26a0\ufe0f Grafico non disponibile.</p>'; };
+    cw.appendChild(img);
+  } else {
+    cw.innerHTML = '<p class="chart-err">\u26a0\ufe0f Grafico non disponibile (matplotlib potrebbe non essere installato sul server).</p>';
+  }
 
-  var tl  = document.getElementById('tl');
+  // Top terms
+  var tl = document.getElementById('tl');
   tl.innerHTML = '';
-  var wts = (d.top_terms || []).map(function(t) { return Math.abs(t.weight); });
+  var wts = (d.top_terms || []).map(function(t){ return Math.abs(t.weight); });
   var mx  = wts.length ? Math.max.apply(null, wts) : 1;
+  if ((d.top_terms || []).length === 0) {
+    tl.innerHTML = '<p style="color:var(--silver);font-size:.85rem">Nessun termine significativo trovato.</p>';
+  }
   (d.top_terms || []).forEach(function(t) {
     var pct = Math.min(100, Math.abs(t.weight) / mx * 100);
     tl.innerHTML += '<div class="term-row">'
@@ -368,14 +428,18 @@ function showResults(d) {
       + '</div>';
   });
 
+  // Cards
   var cg = document.getElementById('cg');
   cg.innerHTML = '';
+  if ((d.quick_results || []).length === 0) {
+    cg.innerHTML = '<p style="color:var(--silver)">Nessun risultato Quick Search (prova a abbassare il min R\u00B2).</p>';
+  }
   (d.quick_results || []).forEach(function(r, i) {
     var cls = r.quality === 'PERFECT' ? 'qp' : r.quality === 'GREAT' ? 'qg' : 'qb';
     cg.innerHTML += '<div class="card">'
-      + '<div class="card-rank">#' + (i + 1) + '</div>'
+      + '<div class="card-rank">#' + (i+1) + ' &nbsp; <span class="' + cls + '">' + r.quality + '</span></div>'
       + '<div class="card-formula">' + r.formula + '</div>'
-      + '<div class="card-r2 ' + cls + '">' + r.quality + ' &nbsp; R\u00B2=' + r.r2.toFixed(6) + ' &nbsp; ' + r.accuracy + '</div>'
+      + '<div class="card-r2 ' + cls + '">R\u00B2 = ' + r.r2.toFixed(6) + ' &nbsp; (' + r.accuracy + ')</div>'
       + '</div>';
   });
 }
@@ -395,7 +459,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '3.1'})
+        return jsonify({'status': 'ok', 'version': '3.2'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
