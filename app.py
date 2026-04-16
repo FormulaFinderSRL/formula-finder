@@ -177,14 +177,21 @@ header span{font-size:.72rem;color:var(--neon);border:1px solid var(--neon);bord
 .upload-label:hover{background:var(--neon)}
 #fn{margin-top:12px;color:var(--neon);font-weight:600;min-height:22px;font-size:.9rem}
 
-/* ── CSV mini-preview ── */
-.preview-box{display:none;background:var(--mid);border:1px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:20px;overflow-x:auto}
-.preview-box h4{color:var(--teal);font-size:.78rem;letter-spacing:1px;margin-bottom:10px}
-.preview-table{border-collapse:collapse;font-size:.75rem;width:100%}
-.preview-table th{background:#0d1b2a;color:var(--neon);padding:5px 10px;text-align:left;border-bottom:1px solid #1e3a5f}
-.preview-table td{color:var(--silver);padding:4px 10px;border-bottom:1px solid #162840}
-.preview-table tr:last-child td{border-bottom:none}
-.preview-meta{font-size:.72rem;color:var(--silver);margin-top:8px;opacity:.7}
+/* ── File stat badge ── */
+.file-stat{display:none;margin-bottom:20px;padding:12px 18px;background:var(--card);border:1px solid #1e3a5f;border-radius:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
+.file-stat.ok{border-left:3px solid var(--neon)}
+.file-stat.warn{border-left:3px solid var(--amber)}
+.file-stat.err{border-left:3px solid var(--red)}
+.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.stat-dot.ok{background:var(--neon)}
+.stat-dot.warn{background:var(--amber)}
+.stat-dot.err{background:var(--red)}
+.stat-text{font-size:.82rem;color:var(--silver);flex:1}
+.stat-text strong{color:var(--white)}
+.stat-tags{display:flex;gap:6px;flex-wrap:wrap}
+.stat-tag{font-size:.7rem;padding:2px 9px;border-radius:20px;background:var(--mid);color:var(--silver);border:1px solid #1e3a5f}
+.stat-tag.hi{color:var(--neon);border-color:rgba(6,214,160,.3)}
+.stat-tag.wa{color:var(--amber);border-color:rgba(252,211,77,.3)}
 
 /* ── Configure columns ── */
 .col-select{display:none;background:var(--card);border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid var(--teal)}
@@ -279,7 +286,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   <!-- ── How it works accordion ── -->
   <div class="how-box">
     <button class="how-toggle" id="howToggle" onclick="toggleHow()">
-      &#128161; HOW TO USE FORMULA FINDER
+      HOW TO USE FORMULA FINDER
       <span class="how-arrow" id="howArrow">&#9660;</span>
     </button>
     <div class="how-body" id="howBody">
@@ -312,26 +319,26 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
         </div>
       </div>
       <div class="how-warn">
-        &#9888;&nbsp;<strong>Excel &amp; semicolons:</strong> if your language settings use <strong>;</strong> as separator (Italian, German, French…), Excel may export CSV with semicolons instead of commas. The app will then see all data as a single column. Fix: open the CSV in a text editor, replace <code>;</code> with <code>,</code> &mdash; or choose <em>CSV UTF-8 (comma delimited)</em> when saving.<br><br>
-        &#9888;&nbsp;<strong>Column named &ldquo;Y&rdquo;:</strong> if one of your input variables is called <code>Y</code> (e.g. a geometric Y coordinate), rename it to something like <code>coord_y</code> before uploading, otherwise it will be auto-selected as the target variable.
+        <strong>Excel &amp; semicolons:</strong> if your language settings use <strong>;</strong> as separator (Italian, German, French…), Excel may export CSV with semicolons instead of commas. The app will then see all data as a single column. Fix: open the CSV in a text editor, replace <code>;</code> with <code>,</code> &mdash; or choose <em>CSV UTF-8 (comma delimited)</em> when saving.<br><br>
+        <strong>Column named &ldquo;Y&rdquo;:</strong> if one of your input variables is called <code>Y</code> (e.g. a geometric Y coordinate), rename it to something like <code>coord_y</code> before uploading, otherwise it will be auto-selected as the target variable.
       </div>
     </div>
   </div>
 
   <!-- ── Upload ── -->
   <div class="upload-zone" id="dropZone">
-    <h2>&#128196; Drop your CSV file here</h2>
+    <h2>Drop your CSV file here</h2>
     <p>or click the button below to browse</p>
     <input type="file" id="fi" accept=".csv">
-    <label for="fi" class="upload-label">&#128193; Choose File</label>
+    <label for="fi" class="upload-label">Choose File</label>
     <p id="fn"></p>
   </div>
 
-  <!-- ── CSV mini-preview ── -->
-  <div class="preview-box" id="previewBox">
-    <h4>&#128202; FILE PREVIEW</h4>
-    <div id="previewTable"></div>
-    <div class="preview-meta" id="previewMeta"></div>
+  <!-- ── File stat badge ── -->
+  <div class="file-stat" id="fileStat">
+    <span class="stat-dot" id="statDot"></span>
+    <span class="stat-text" id="statText"></span>
+    <div class="stat-tags" id="statTags"></div>
   </div>
 
   <!-- ── Configure Columns ── -->
@@ -339,17 +346,17 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <h3>CONFIGURE COLUMNS</h3>
     <div class="col-row">
       <div class="col-group">
-        <label>&#127919; Target Y</label>
+        <label>Target Y</label>
         <select id="yCol" onchange="syncXcols()"></select>
         <span class="hint">The variable you want to predict</span>
       </div>
       <div class="col-group" style="flex:1;min-width:180px">
-        <label>&#128200; Variables X</label>
+        <label>Variables X</label>
         <select id="xCols" multiple style="height:110px"></select>
         <span class="hint">Cmd/Ctrl to select multiple &nbsp;&bull;&nbsp; Y is automatically excluded</span>
       </div>
       <div class="col-group">
-        <label>&#9881; Method</label>
+        <label>Method</label>
         <select id="method" onchange="updatePreviewLabel()">
           <option value="both">Both (Quick + Adam)</option>
           <option value="quick">Quick only</option>
@@ -375,8 +382,8 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
       <button class="expand-btn" id="expandBtn" onclick="toggleFormula()" style="display:none">&#9660; Show full formula</button>
       <div class="best-r2" id="br"></div>
       <div class="result-actions">
-        <button class="action-btn" id="copyBtn" onclick="copyFormula()">&#128203; Copy formula</button>
-        <button class="action-btn" onclick="exportCSV()">&#8681; Download results CSV</button>
+        <button class="action-btn" id="copyBtn" onclick="copyFormula()">Copy formula</button>
+        <button class="action-btn" onclick="exportCSV()">Download results CSV</button>
       </div>
     </div>
     <div class="chart-box">
@@ -394,7 +401,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
   </div>
 
 </div>
-<footer>Formula Finder v4.0 &mdash; FormulaFinder S.R.L.</footer>
+<footer>FormulaFinder (surely created by not G.)</footer>
 
 <script>
 var csv            = null;
@@ -421,7 +428,7 @@ dz.addEventListener('drop', function(e){
 
 function handleFile(f) {
   if (!f) return;
-  document.getElementById('fn').textContent = '\u2705 ' + f.name;
+  document.getElementById('fn').textContent = f.name;
 
   // Use PapaParse for robust CSV parsing (handles BOM, quotes, auto-detects separator)
   Papa.parse(f, {
@@ -430,7 +437,7 @@ function handleFile(f) {
     dynamicTyping: false,
     complete: function(result) {
       if (!result.data || result.data.length === 0) {
-        document.getElementById('fn').textContent = '\u274c Could not parse file. Check format.';
+        document.getElementById('fn').textContent = 'Could not parse file — check format.';
         return;
       }
       parsedData = result;
@@ -441,7 +448,7 @@ function handleFile(f) {
       parseCols();
     },
     error: function(err) {
-      document.getElementById('fn').textContent = '\u274c Parse error: ' + err.message;
+      document.getElementById('fn').textContent = 'Parse error: ' + err.message;
     }
   });
 }
@@ -464,7 +471,7 @@ function showPreview(result) {
   html += '</tbody></table>';
   wrap.innerHTML = html;
   meta.textContent = result.data.length + ' rows \u00B7 ' + cols.length + ' columns detected' +
-    (result.meta.delimiter !== ',' ? '  \u26a0\ufe0f Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
+    (result.meta.delimiter !== ',' ? '  Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
   box.style.display = 'block';
 }
 
@@ -546,7 +553,7 @@ async function run() {
     showResults(d);
   } catch(e) {
     document.getElementById('err').style.display = 'block';
-    document.getElementById('err').textContent   = '\u274c ' + e.message;
+    document.getElementById('err').textContent   = e.message;
   } finally {
     document.getElementById('spin').style.display = 'none';
     document.getElementById('runBtn').disabled    = false;
@@ -624,8 +631,8 @@ function copyFormula() {
   if (!formula || formula === 'n/a') return;
   navigator.clipboard.writeText(formula).then(function() {
     var btn = document.getElementById('copyBtn');
-    btn.textContent = '\u2705 Copied!';
-    setTimeout(function(){ btn.textContent = '\u{1F4CB} Copy formula'; }, 1800);
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = 'Copy formula'; }, 1800);
   }).catch(function() {
     // fallback
     var ta = document.createElement('textarea');
@@ -672,7 +679,7 @@ function toggleFormula() {
 
 function showValMsg(msg) {
   var el = document.getElementById('valMsg');
-  el.textContent = '\u26a0\ufe0f ' + msg;
+  el.textContent = msg;
   el.style.display = 'block';
 }
 function hideValMsg() {
@@ -694,7 +701,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '4.0'})
+        return jsonify({'status': 'ok', 'version': '4.1'})
 
     @app.route('/api/find', methods=['POST'])
     def api_find():
