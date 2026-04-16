@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-FORMULA FINDER v3.0 — Complete App
-Upload fix v3: button-only trigger, no double-click conflict
-"""
 import numpy as np, pandas as pd, base64, io, warnings
 warnings.filterwarnings("ignore")
 
@@ -26,12 +22,12 @@ def build_features(X_dict):
     for v,x in X_dict.items():
         x=np.asarray(x,float); xc=np.clip(x,-15,15); xp=np.where(x>1e-6,x,1e-6)
         feats+=[x,x**2,x**3,np.exp(xc),np.exp(-xc),np.log(xp),np.sin(x),np.cos(x),np.tanh(x),np.sqrt(np.abs(x)),1/(1+x**2),x*np.exp(xc),x*np.sin(x)]
-        names+=[v,f"{v}^2",f"{v}^3",f"exp({v})",f"exp(-{v})",f"ln({v})",f"sin({v})",f"cos({v})",f"tanh({v})",f"sqrt|{v}|",f"1/(1+{v}^2)",f"{v}*exp({v})",f"{v}*sin({v})"]
+        names+=[v,v+"^2",v+"^3","exp("+v+")","exp(-"+v+")","ln("+v+")","sin("+v+")","cos("+v+")","tanh("+v+")","sqrt|"+v+"|","1/(1+"+v+"^2)",v+"*exp("+v+")",v+"*sin("+v+")"]
     vlist=list(X_dict.keys())
     for i in range(len(vlist)):
         for j in range(i+1,len(vlist)):
             v1,v2=vlist[i],vlist[j]; x1=np.asarray(X_dict[v1],float); x2=np.asarray(X_dict[v2],float)
-            feats+=[x1*x2,eml(x1,x2)]; names+=[f"{v1}*{v2}",f"eml({v1},{v2})"]
+            feats+=[x1*x2,eml(x1,x2)]; names+=[v1+"*"+v2,"eml("+v1+","+v2+")"]
     return np.column_stack(feats),names
 
 class EMLAdamRegressor:
@@ -50,7 +46,7 @@ class EMLAdamRegressor:
     def formula(self,thr=0.05):
         terms=[]
         for n,w in zip(self.names,self.w):
-            if abs(w)>thr: terms.append(f"{w:+.3f}" if n=="1" else f"{w:+.3f}*{n}")
+            if abs(w)>thr: terms.append(("+%.3f" % w) if n=="1" else ("%.3f*" % w)+n)
         return "y = "+" ".join(terms).lstrip("+").strip() if terms else "y = 0"
     def top_terms(self,n=5):
         idx=np.argsort(np.abs(self.w))[::-1][:n]
@@ -59,19 +55,19 @@ class EMLAdamRegressor:
 def quick_search(X_dict,y,top_n=8,min_r2=0.5):
     ops={}
     for v,x in X_dict.items():
-        ops[f"exp({v})"]  = lambda d,v=v: np.exp(np.clip(d[v],-500,500))
-        ops[f"ln({v})"]   = lambda d,v=v: np.log(np.where(d[v]>0,d[v],1e-10))
-        ops[f"{v}^2"]     = lambda d,v=v: d[v]**2
-        ops[f"{v}^3"]     = lambda d,v=v: d[v]**3
-        ops[f"sqrt({v})"] = lambda d,v=v: np.sqrt(np.abs(d[v]))
-        ops[f"sin({v})"]  = lambda d,v=v: np.sin(d[v])
-        ops[f"cos({v})"]  = lambda d,v=v: np.cos(d[v])
-        ops[v]            = lambda d,v=v: d[v]
-        ops[f"eml({v},1)"]= lambda d,v=v: eml(d[v],np.ones(len(d[v])))
+        ops["exp("+v+")"]  = lambda d,v=v: np.exp(np.clip(d[v],-500,500))
+        ops["ln("+v+")"]   = lambda d,v=v: np.log(np.where(d[v]>0,d[v],1e-10))
+        ops[v+"^2"]        = lambda d,v=v: d[v]**2
+        ops[v+"^3"]        = lambda d,v=v: d[v]**3
+        ops["sqrt("+v+")"] = lambda d,v=v: np.sqrt(np.abs(d[v]))
+        ops["sin("+v+")"]  = lambda d,v=v: np.sin(d[v])
+        ops["cos("+v+")"]  = lambda d,v=v: np.cos(d[v])
+        ops[v]             = lambda d,v=v: d[v]
+        ops["eml("+v+",1)"]= lambda d,v=v: eml(d[v],np.ones(len(d[v])))
     vlist=list(X_dict.keys())
     for i in range(len(vlist)):
         for j in range(i+1,len(vlist)):
-            v1,v2=vlist[i],vlist[j]; ops[f"{v1}*{v2}"]=lambda d,v1=v1,v2=v2: d[v1]*d[v2]
+            v1,v2=vlist[i],vlist[j]; ops[v1+"*"+v2]=lambda d,v1=v1,v2=v2: d[v1]*d[v2]
     y=np.asarray(y,float); n=len(y); res=[]
     for nm,fn in ops.items():
         try:
@@ -82,64 +78,56 @@ def quick_search(X_dict,y,top_n=8,min_r2=0.5):
             ss_r=np.sum((y-yp)**2); ss_t=np.sum((y-np.mean(y))**2)
             r2=float(1-ss_r/ss_t) if ss_t>0 else 1.0
             if r2>=min_r2:
-                if abs(a-1)<0.005 and abs(b)<0.005: fs=f"y = {nm}"
-                elif abs(b)<0.005: fs=f"y = {a:.3f}*{nm}"
-                else: fs=f"y = {a:.3f}*{nm} + {b:.3f}"
-                res.append({"formula":fs,"r2":round(r2,6),"accuracy":f"{r2*100:.4f}%",
-                    "quality":"PERFECT ✅" if r2>0.9999 else "GREAT 🟢" if r2>0.99 else "GOOD 🟡"})
+                if abs(a-1)<0.005 and abs(b)<0.005: fs="y = "+nm
+                elif abs(b)<0.005: fs="y = %.3f*%s" % (a,nm)
+                else: fs="y = %.3f*%s + %.3f" % (a,nm,b)
+                res.append({"formula":fs,"r2":round(r2,6),"accuracy":"%.4f%%" % (r2*100),
+                    "quality":"PERFECT" if r2>0.9999 else "GREAT" if r2>0.99 else "GOOD"})
         except: pass
     res.sort(key=lambda d:d["r2"],reverse=True); return res[:top_n]
 
 def make_chart_b64(X_dict,y_true,model=None):
     try:
-        import matplotlib; matplotlib.use("Agg")
+        import matplotlib
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-import cycler
-
-# Enable grid and update its appearance
-plt.rcParams.update({'axes.grid': True})
-plt.rcParams.update({'grid.color': 'silver'})
-plt.rcParams.update({'grid.linestyle': '--'})
-
-# Set figure resolution
-plt.rcParams.update({'figure.dpi': 150})
-
-# Hide the top and right spines
-plt.rcParams.update({'axes.spines.top': False})
-plt.rcParams.update({'axes.spines.right': False})
-
-# Increase font sizes
-plt.rcParams.update({'font.size': 12})  # General font size
-plt.rcParams.update({'axes.titlesize': 14})  # Title font size
-plt.rcParams.update({'axes.labelsize': 12})  # Axis label font size
-
-plt.rcParams.update({'axes.prop_cycle': cycler.cycler('color', ['#000000'])})
-        fig,axes=plt.subplots(1,2,figsize=(12,4)); fig.patch.set_facecolor("#0D1B2A")
-        vlist=list(X_dict.keys()); x_vals=np.asarray(X_dict[vlist[0]],float); y_true=np.asarray(y_true,float)
-        idx=np.argsort(x_vals); xs,ys=x_vals[idx],y_true[idx]
+        fig,axes=plt.subplots(1,2,figsize=(12,4))
+        fig.patch.set_facecolor("#0D1B2A")
+        vlist=list(X_dict.keys())
+        x_vals=np.asarray(X_dict[vlist[0]],float)
+        y_true=np.asarray(y_true,float)
+        sidx=np.argsort(x_vals); xs,ys=x_vals[sidx],y_true[sidx]
         ax=axes[0]; ax.set_facecolor("#112233")
         ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
         if model:
             yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_true)
-            ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label=f"Fit  R2={r2:.4f}",zorder=4)
-        ax.set_title("Data vs Fit",color="white",fontsize=11); ax.tick_params(colors="#888")
+            ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label="Fit R2=%.4f" % r2,zorder=4)
+        ax.set_title("Data vs Fit",color="white",fontsize=11)
+        ax.tick_params(colors="#888")
         ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
         for s in ax.spines.values(): s.set_edgecolor("#333355")
         ax2=axes[1]; ax2.set_facecolor("#112233")
         if model:
-            res2=ys-model.predict({vlist[0]:xs}); ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
-            ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--"); ax2.set_title("Residuals",color="white",fontsize=11)
+            res2=ys-model.predict({vlist[0]:xs})
+            ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
+            ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--")
+            ax2.set_title("Residuals",color="white",fontsize=11)
         ax2.tick_params(colors="#888")
         for s in ax2.spines.values(): s.set_edgecolor("#333355")
-        plt.tight_layout(); buf=io.BytesIO()
+        plt.tight_layout()
+        buf=io.BytesIO()
         plt.savefig(buf,format="png",dpi=100,bbox_inches="tight",facecolor="#0D1B2A")
-        plt.close(); buf.seek(0); return base64.b64encode(buf.read()).decode()
-    except: return ""
+        plt.close()
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode()
+    except Exception:
+        return ""
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="en">
+HTML_PAGE = '''<!DOCTYPE html>
+<html lang='en'>
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Formula Finder</title>
 <style>
 :root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
@@ -175,7 +163,7 @@ select{background:var(--mid);color:var(--white);border:1px solid var(--teal);bor
 .card-rank{font-size:.75rem;color:var(--silver);letter-spacing:1px}
 .card-formula{font-family:monospace;font-size:.95rem;color:var(--white);margin:6px 0;word-break:break-all}
 .card-r2{font-size:.85rem}
-.qp{color:var(--neon)} .qg{color:#06D6A0} .qb{color:var(--amber)}
+.qp{color:var(--neon)}.qg{color:#06D6A0}.qb{color:var(--amber)}
 .chart-box{background:var(--card);border-radius:12px;padding:20px;margin-bottom:24px;border:1px solid #1e3a5f}
 .chart-box h3{color:var(--teal);margin-bottom:14px;letter-spacing:1px}
 .chart-box img{width:100%;border-radius:8px}
@@ -188,60 +176,70 @@ select{background:var(--mid);color:var(--white);border:1px solid var(--teal);bor
 .term-w{color:var(--amber);font-size:.85rem;min-width:70px;text-align:right}
 .error-box{background:#2a1018;border:1px solid var(--red);border-radius:10px;padding:16px;color:var(--red);margin-bottom:16px}
 footer{text-align:center;padding:24px;color:var(--silver);font-size:.8rem;border-top:1px solid #1e3a5f;margin-top:40px}
-</style></head>
+</style>
+</head>
 <body>
 <header><h1>FORMULA FINDER</h1><span>Powered by EML + Adam</span></header>
-<div class="container">
-<div class="upload-zone" id="dropZone">
-  <h2>Drop your CSV file here</h2>
-  <p>or click the button below to browse</p>
-  <input type="file" id="fi" accept=".csv" style="display:none">
-  <button type="button" class="upload-btn" id="chooseBtn">Choose File</button>
-  <p id="fn" style="margin-top:12px;color:var(--neon);font-weight:600"></p>
-</div>
-<div class="col-select" id="colSel">
-  <h3>CONFIGURE COLUMNS</h3>
-  <div class="col-row">
-    <div><label>Target (Y)</label><select id="yCol"></select></div>
-    <div><label>Variables (X) &mdash; hold Ctrl for multiple</label><select id="xCols" multiple style="height:90px"></select></div>
-    <div><label>Method</label><select id="method"><option value="both">Both (Quick + Adam)</option><option value="quick">Quick only</option><option value="adam">Adam only</option></select></div>
+<div class='container'>
+  <div class='upload-zone' id='dropZone'>
+    <h2>Drop your CSV file here</h2>
+    <p>or click the button below</p>
+    <input type='file' id='fi' accept='.csv' style='display:none'>
+    <button type='button' class='upload-btn' id='chooseBtn'>Choose File</button>
+    <p id='fn' style='margin-top:12px;color:var(--neon);font-weight:600'></p>
   </div>
-  <button type="button" class="run-btn" id="runBtn" onclick="run()">FIND FORMULA</button>
+  <div class='col-select' id='colSel'>
+    <h3>CONFIGURE COLUMNS</h3>
+    <div class='col-row'>
+      <div><label>Target (Y)</label><select id='yCol'></select></div>
+      <div><label>Variables (X) - Ctrl for multiple</label><select id='xCols' multiple style='height:90px'></select></div>
+      <div><label>Method</label><select id='method'>
+        <option value='both'>Both (Quick + Adam)</option>
+        <option value='quick'>Quick only</option>
+        <option value='adam'>Adam only</option>
+      </select></div>
+    </div>
+    <button type='button' class='run-btn' id='runBtn' onclick='run()'>FIND FORMULA</button>
+  </div>
+  <div class='spinner' id='spin'>Searching... please wait</div>
+  <div class='error-box' id='err' style='display:none'></div>
+  <div class='results' id='res'>
+    <div class='best-box'><h2>BEST FORMULA FOUND</h2><div class='best-formula' id='bf'></div><div class='best-r2' id='br'></div></div>
+    <div class='chart-box'><h3>DASHBOARD</h3><img id='ci' src='' alt='chart'></div>
+    <div class='terms-box'><h3>TOP TERMS (Adam)</h3><div id='tl'></div></div>
+    <div class='cards-grid' id='cg'></div>
+  </div>
 </div>
-<div class="spinner" id="spin">Searching for the formula... please wait</div>
-<div class="error-box" id="err" style="display:none"></div>
-<div class="results" id="res">
-  <div class="best-box"><h2>BEST FORMULA FOUND</h2><div class="best-formula" id="bf"></div><div class="best-r2" id="br"></div></div>
-  <div class="chart-box"><h3>DASHBOARD &mdash; Data vs Fit &amp; Residuals</h3><img id="ci" src="" alt="chart"></div>
-  <div class="terms-box"><h3>TOP CONTRIBUTING TERMS (Adam)</h3><div id="tl"></div></div>
-  <div class="cards-grid" id="cg"></div>
-</div>
-</div>
-<footer>Formula Finder v3.0 | EML Operator &mdash; Odrzywolek, arXiv 2026</footer>
+<footer>Formula Finder v3.0</footer>
 <script>
-var csv = null;
-var fi = document.getElementById('fi');
-var chooseBtn = document.getElementById('chooseBtn');
-var dz = document.getElementById('dropZone');
+var csv=null;
+var fi=document.getElementById('fi');
+var cb=document.getElementById('chooseBtn');
+var dz=document.getElementById('dropZone');
 
-// Button opens file dialog — stopPropagation prevents bubble to dropZone
-chooseBtn.addEventListener('click', function(e) {
+// FIX: use setTimeout to trigger file dialog outside the event handler
+// This resolves Chrome on Mac silently blocking programmatic .click() calls
+cb.addEventListener('click', function(e) {
+  e.preventDefault();
   e.stopPropagation();
-  fi.value = '';
-  fi.click();
+  setTimeout(function() { fi.click(); }, 10);
 });
 
-// File selected via native dialog
 fi.addEventListener('change', function() {
-  if (fi.files && fi.files.length > 0) { handle(fi.files[0]); }
+  if (fi.files && fi.files.length > 0) handle(fi.files[0]);
 });
 
-// Drag & drop
-dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
-dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+dz.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  dz.classList.add('dragover');
+});
+dz.addEventListener('dragleave', function() {
+  dz.classList.remove('dragover');
+});
 dz.addEventListener('drop', function(e) {
-  e.preventDefault(); dz.classList.remove('dragover');
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) { handle(e.dataTransfer.files[0]); }
+  e.preventDefault();
+  dz.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handle(e.dataTransfer.files[0]);
 });
 
 function handle(f) {
@@ -253,13 +251,12 @@ function handle(f) {
 }
 
 function parseCols(c) {
-  var h = c.trim().split('\n')[0].split(',').map(function(x){ return x.trim().replace(/"/g,''); });
-  var yEl = document.getElementById('yCol');
-  var xEl = document.getElementById('xCols');
-  yEl.innerHTML = ''; xEl.innerHTML = '';
-  h.forEach(function(v,i) {
-    yEl.innerHTML += '<option value="' + v + '"' + (i===h.length-1?' selected':'') + '>' + v + '</option>';
-    xEl.innerHTML += '<option value="' + v + '"' + (i<h.length-1?' selected':'') + '>' + v + '</option>';
+  var h = c.trim().split('\n')[0].split(',').map(function(x) { return x.trim().replace(/"/g,''); });
+  var yE = document.getElementById('yCol'), xE = document.getElementById('xCols');
+  yE.innerHTML = ''; xE.innerHTML = '';
+  h.forEach(function(v, i) {
+    yE.innerHTML += '<option value="' + v + '"' + (i === h.length-1 ? ' selected' : '') + '>' + v + '</option>';
+    xE.innerHTML += '<option value="' + v + '"' + (i < h.length-1 ? ' selected' : '') + '>' + v + '</option>';
   });
   document.getElementById('colSel').style.display = 'block';
 }
@@ -270,11 +267,14 @@ async function run() {
   document.getElementById('err').style.display = 'none';
   document.getElementById('runBtn').disabled = true;
   var yc = document.getElementById('yCol').value;
-  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
-  var m  = document.getElementById('method').value;
+  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o) { return o.value; });
+  var m = document.getElementById('method').value;
   try {
-    var resp = await fetch('/api/find', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({csv:csv, y_col:yc, x_cols:xc, method:m})});
+    var resp = await fetch('/api/find', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, method: m})
+    });
     var d = await resp.json();
     if (!d.success) throw new Error(d.error);
     show(d);
@@ -291,92 +291,84 @@ function show(d) {
   document.getElementById('res').style.display = 'block';
   var b = (d.quick_results && d.quick_results[0]) || {};
   document.getElementById('bf').textContent = d.adam_formula || b.formula || 'n/a';
-  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2*100).toFixed(4)+'%' : b.accuracy||'n/a');
+  document.getElementById('br').textContent = 'Accuracy: ' + (d.adam_r2 ? (d.adam_r2*100).toFixed(4)+'%' : b.accuracy || 'n/a');
   if (d.chart_b64) document.getElementById('ci').src = 'data:image/png;base64,' + d.chart_b64;
-  var tl = document.getElementById('tl'); tl.innerHTML = '';
-  var weights = (d.top_terms||[]).map(function(t){ return Math.abs(t.weight); });
-  var mx = weights.length ? Math.max.apply(null, weights) : 1;
-  (d.top_terms||[]).forEach(function(t) {
+  var tl = document.getElementById('tl');
+  tl.innerHTML = '';
+  var wts = (d.top_terms || []).map(function(t) { return Math.abs(t.weight); });
+  var mx = wts.length ? Math.max.apply(null, wts) : 1;
+  (d.top_terms || []).forEach(function(t) {
     var p = Math.min(100, Math.abs(t.weight)/mx*100);
-    tl.innerHTML += '<div class="term-row"><span class="term-name">'+t.term+'</span>'
-      +'<div class="term-bar-wrap"><div class="term-bar" style="width:'+p+'%"></div></div>'
-      +'<span class="term-w">'+t.weight.toFixed(4)+'</span></div>';
+    tl.innerHTML += '<div class="term-row"><span class="term-name">'+t.term+'</span><div class="term-bar-wrap"><div class="term-bar" style="width:'+p+'%"></div></div><span class="term-w">'+t.weight.toFixed(4)+'</span></div>';
   });
-  var cg = document.getElementById('cg'); cg.innerHTML = '';
-  (d.quick_results||[]).forEach(function(r,i) {
-    var qc = r.quality.includes('PERFECT')?'qp':r.quality.includes('GREAT')?'qg':'qb';
-    cg.innerHTML += '<div class="card"><div class="card-rank">#'+(i+1)+'</div>'
-      +'<div class="card-formula">'+r.formula+'</div>'
-      +'<div class="card-r2 '+qc+'">'+r.quality+' &nbsp; R\u00b2='+r.r2.toFixed(6)+' &nbsp; '+r.accuracy+'</div></div>';
+  var cg = document.getElementById('cg');
+  cg.innerHTML = '';
+  (d.quick_results || []).forEach(function(r, i) {
+    var qc = r.quality==='PERFECT'?'qp':r.quality==='GREAT'?'qg':'qb';
+    cg.innerHTML += '<div class="card"><div class="card-rank">#'+(i+1)+'</div><div class="card-formula">'+r.formula+'</div><div class="card-r2 '+qc+'">'+r.quality+' R2='+r.r2.toFixed(6)+' '+r.accuracy+'</div></div>';
   });
 }
-</script></body></html>"""
-
+</script>
+</body>
+</html>'''
 
 def create_app():
     from flask import Flask, request, jsonify, Response
     app = Flask(__name__)
     app.config['MAX_CONTENT_LENGTH'] = 50*1024*1024
 
-    @app.route("/")
-    def home(): return Response(HTML_PAGE, mimetype="text/html")
+    @app.route('/')
+    def home(): return Response(HTML_PAGE, mimetype='text/html')
 
-    @app.route("/health")
-    def health(): return jsonify({"status":"ok","version":"3.0"})
+    @app.route('/health')
+    def health(): return jsonify({'status':'ok','version':'3.0'})
 
-    @app.route("/api/find", methods=["POST"])
+    @app.route('/api/find', methods=['POST'])
     def api_find():
         try:
             body=request.get_json()
-            df=pd.read_csv(io.StringIO(body["csv"]))
-            X_dict={c:df[c].astype(float).values for c in body["x_cols"]}
-            y_data=df[body["y_col"]].astype(float).values
-            method=body.get("method","both")
-            result={"success":True}
-            if method in ("quick","both"): result["quick_results"]=quick_search(X_dict,y_data,top_n=8)
-            if method in ("adam","both"):
+            df=pd.read_csv(io.StringIO(body['csv']))
+            X_dict={c:df[c].astype(float).values for c in body['x_cols']}
+            y_data=df[body['y_col']].astype(float).values
+            method=body.get('method','both')
+            result={'success':True}
+            if method in ('quick','both'): result['quick_results']=quick_search(X_dict,y_data,top_n=8)
+            if method in ('adam','both'):
                 model=EMLAdamRegressor(lr=0.05,epochs=1200,l1=5e-4).fit(X_dict,y_data)
-                result["adam_formula"]=model.formula(thr=0.05)
-                result["adam_r2"]=round(model.r2(X_dict,y_data),6)
-                result["top_terms"]=model.top_terms(8)
-                result["chart_b64"]=make_chart_b64(X_dict,y_data,model)
-            else: result["chart_b64"]=make_chart_b64(X_dict,y_data)
+                result['adam_formula']=model.formula(thr=0.05)
+                result['adam_r2']=round(model.r2(X_dict,y_data),6)
+                result['top_terms']=model.top_terms(8)
+                result['chart_b64']=make_chart_b64(X_dict,y_data,model)
+            else: result['chart_b64']=make_chart_b64(X_dict,y_data)
             return jsonify(result)
-        except Exception as e: return jsonify({"success":False,"error":str(e)}),400
+        except Exception as e: return jsonify({'success':False,'error':str(e)}),400
 
-    @app.route("/api/json", methods=["POST"])
+    @app.route('/api/json', methods=['POST'])
     def api_json():
         try:
             body=request.get_json()
-            X_dict={k:np.array(v,float) for k,v in body["X"].items()}
-            y_data=np.array(body["y"],float)
-            method=body.get("method","quick")
-            result={"success":True}
-            if method in ("quick","both"): result["quick_results"]=quick_search(X_dict,y_data,top_n=8)
-            if method in ("adam","both"):
+            X_dict={k:np.array(v,float) for k,v in body['X'].items()}
+            y_data=np.array(body['y'],float)
+            method=body.get('method','quick')
+            result={'success':True}
+            if method in ('quick','both'): result['quick_results']=quick_search(X_dict,y_data,top_n=8)
+            if method in ('adam','both'):
                 model=EMLAdamRegressor(lr=0.05,epochs=1000,l1=5e-4).fit(X_dict,y_data)
-                result["adam_formula"]=model.formula()
-                result["adam_r2"]=round(model.r2(X_dict,y_data),6)
-                result["top_terms"]=model.top_terms(5)
+                result['adam_formula']=model.formula()
+                result['adam_r2']=round(model.r2(X_dict,y_data),6)
+                result['top_terms']=model.top_terms(5)
             return jsonify(result)
-        except Exception as e: return jsonify({"success":False,"error":str(e)}),400
+        except Exception as e: return jsonify({'success':False,'error':str(e)}),400
 
     return app
 
-
 app = create_app()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
     p=argparse.ArgumentParser()
-    p.add_argument("--port",type=int,default=5000)
-    p.add_argument("--host",default="0.0.0.0")
-    p.add_argument("--demo",action="store_true")
+    p.add_argument('--port',type=int,default=5000)
+    p.add_argument('--host',default='0.0.0.0')
     args=p.parse_args()
-    if args.demo:
-        x=np.linspace(0.5,3,50); y=np.exp(x)+np.random.normal(0,0.05,50)
-        for r in quick_search({"x":x},y,top_n=3): print(f"  {r['formula']}  R2={r['r2']}")
-    else:
-        app=create_app()
-        if app:
-            app.run(host=args.host,port=args.port,debug=False)
+    app=create_app()
+    if app: app.run(host=args.host,port=args.port,debug=False)
