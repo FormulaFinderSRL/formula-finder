@@ -1,863 +1,1093 @@
 #!/usr/bin/env python3
-"""
-SumUp Insights — Correlation Discovery Engine powered by Claude AI
-"""
-import numpy as np
-import pandas as pd
-import base64
-import io
-import os
-import warnings
+import numpy as np, pandas as pd, base64, io, warnings
 warnings.filterwarnings("ignore")
 
-# ─────────────────────── MATH CORE ───────────────────────
+# ─────────────────────────── MATH CORE ───────────────────────────
 
-def detect_relationship_type(x, y):
-    from scipy import stats
-    x = np.asarray(x, float)
-    y = np.asarray(y, float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    x, y = x[mask], y[mask]
-    if len(x) < 3:
-        return {"type": "Insufficient data", "r2": 0, "formula": "n/a", "confidence": 0}
+class Adam:
+    def __init__(self,lr=0.05,b1=0.9,b2=0.999,eps=1e-8):
+        self.lr,self.b1,self.b2,self.eps=lr,b1,b2,eps
+        self.m=self.v=None; self.t=0
+    def step(self,w,g):
+        if self.m is None: self.m=np.zeros_like(w,dtype=float); self.v=np.zeros_like(w,dtype=float)
+        self.t+=1
+        self.m=self.b1*self.m+(1-self.b1)*g; self.v=self.b2*self.v+(1-self.b2)*g**2
+        mh=self.m/(1-self.b1**self.t); vh=self.v/(1-self.b2**self.t)
+        return w-self.lr*mh/(np.sqrt(vh)+self.eps)
 
-    results = []
+def eml(x,y,eps=1e-10):
+    y_s=np.where(np.array(y)>0,np.array(y),eps)
+    return np.exp(np.clip(np.array(x),-500,500))-np.log(y_s)
 
-    try:
-        slope, intercept, r, p, se = stats.linregress(x, y)
-        r2 = r**2
-        sign = "+" if intercept >= 0 else "-"
-        results.append({"type": "Linear", "r2": r2,
-            "formula": f"y = {slope:.3f}x {sign} {abs(intercept):.3f}",
-            "confidence": round(r2 * 100, 1)})
-    except: pass
+def build_features(X_dict):
+    feats=[np.ones(len(list(X_dict.values())[0]))]; names=["1"]
+    for v,x in X_dict.items():
+        x=np.asarray(x,float); xc=np.clip(x,-15,15); xp=np.where(x>1e-6,x,1e-6)
+        feats+=[x,x**2,x**3,np.exp(xc),np.exp(-xc),np.log(xp),np.sin(x),np.cos(x),np.tanh(x),np.sqrt(np.abs(x)),1/(1+x**2),x*np.exp(xc),x*np.sin(x)]
+        names+=[v,v+"^2",v+"^3","exp("+v+")","exp(-"+v+")","ln("+v+")","sin("+v+")","cos("+v+")","tanh("+v+")","sqrt|"+v+"|","1/(1+"+v+"^2)",v+"*exp("+v+")",v+"*sin("+v+")"]
+    vlist=list(X_dict.keys())
+    for i in range(len(vlist)):
+        for j in range(i+1,len(vlist)):
+            v1,v2=vlist[i],vlist[j]; x1=np.asarray(X_dict[v1],float); x2=np.asarray(X_dict[v2],float)
+            feats+=[x1*x2,eml(x1,x2)]; names+=[v1+"*"+v2,"eml("+v1+","+v2+")"]
+    return np.column_stack(feats),names
 
-    try:
-        xp = np.where(x > 0, x, 1e-10)
-        slope, intercept, r, p, se = stats.linregress(np.log(xp), y)
-        r2 = r**2
-        results.append({"type": "Logarithmic", "r2": r2,
-            "formula": f"y = {slope:.3f} · ln(x) + {intercept:.3f}",
-            "confidence": round(r2 * 100, 1)})
-    except: pass
+class EMLAdamRegressor:
+    def __init__(self,lr=0.05,epochs=1500,l1=1e-3): self.lr,self.epochs,self.l1=lr,epochs,l1; self.w=self.names=None
+    def fit(self,X_dict,y):
+        F,self.names=build_features(X_dict); y=np.asarray(y,float)
+        self.w,_,_,_=np.linalg.lstsq(F,y,rcond=None); opt=Adam(lr=self.lr)
+        for _ in range(self.epochs):
+            yp=F@self.w; g=(2/len(y))*(F.T@(yp-y))+self.l1*np.sign(self.w); self.w=opt.step(self.w,g)
+        return self
+    def predict(self,X_dict): F,_=build_features(X_dict); return F@self.w
+    def r2(self,X_dict,y):
+        yp=self.predict(X_dict); y=np.asarray(y,float)
+        ss_r=np.sum((y-yp)**2); ss_t=np.sum((y-np.mean(y))**2)
+        return float(1-ss_r/ss_t) if ss_t>0 else 1.0
+    def formula(self,thr=0.05):
+        terms=[]
+        for n,w in zip(self.names,self.w):
+            if abs(w)>thr:
+                if n=="1": terms.append("%.3f" % w)
+                else: terms.append("%.3f*%s" % (w,n))
+        if not terms: return "y = 0"
+        result="y = "+terms[0]
+        for t in terms[1:]:
+            result+=(" - "+t[1:]) if t.startswith("-") else (" + "+t)
+        return result
+    def top_terms(self,n=5):
+        idx=np.argsort(np.abs(self.w))[::-1][:n]
+        return [{"term":self.names[i],"weight":round(float(self.w[i]),4)} for i in idx if abs(self.w[i])>0.01]
 
-    try:
-        xp = np.where(x > 0, x, 1e-10)
-        yp = np.where(y > 0, y, 1e-10)
-        slope, intercept, r, p, se = stats.linregress(np.log(xp), np.log(yp))
-        r2 = r**2
-        results.append({"type": "Power Law", "r2": r2,
-            "formula": f"y = {np.exp(intercept):.3f} · x^{slope:.3f}",
-            "confidence": round(r2 * 100, 1)})
-    except: pass
-
-    try:
-        yp = np.where(y > 0, y, 1e-10)
-        slope, intercept, r, p, se = stats.linregress(x, np.log(yp))
-        r2 = r**2
-        results.append({"type": "Exponential", "r2": r2,
-            "formula": f"y = e^({intercept:.3f} + {slope:.3f}·x)",
-            "confidence": round(r2 * 100, 1)})
-    except: pass
-
-    try:
-        coeffs = np.polyfit(x, y, 2)
-        yp = np.polyval(coeffs, x)
-        ss_res = np.sum((y - yp)**2)
-        ss_tot = np.sum((y - np.mean(y))**2)
-        r2 = float(1 - ss_res/ss_tot) if ss_tot > 0 else 0
-        results.append({"type": "Polynomial", "r2": r2,
-            "formula": f"y = {coeffs[0]:.3f}x² + {coeffs[1]:.3f}x + {coeffs[2]:.3f}",
-            "confidence": round(r2 * 100, 1)})
-    except: pass
-
-    if not results:
-        return {"type": "No pattern found", "r2": 0, "formula": "n/a", "confidence": 0}
-
-    best = max(results, key=lambda d: d["r2"])
-    best["all_types"] = results
-    return best
-
-
-def make_chart_b64(df, x_col, y_col, rel_type=None):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from scipy import stats
-
-    BG = "#FFFFFF"
-    GRID = "#F3F4F6"
-    PRIMARY = "#7B2FBE"
-    SECONDARY = "#A855F7"
-    DOT = "#1F2937"
-    TEXT = "#374151"
-    LIGHT = "#9CA3AF"
-
-    x = df[x_col].values.astype(float)
-    y = df[y_col].values.astype(float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    x, y = x[mask], y[mask]
-    sidx = np.argsort(x)
-    xs, ys = x[sidx], y[sidx]
-
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(BG)
-
-    ax.scatter(xs, ys, color=PRIMARY, s=50, alpha=0.75, zorder=5, label="Data points")
-
-    if rel_type and rel_type.get("type") not in ("No pattern found", "Insufficient data", None):
+def quick_search(X_dict,y,top_n=8,min_r2=0.5):
+    ops={}
+    for v,x in X_dict.items():
+        ops["exp("+v+")"]  = lambda d,v=v: np.exp(np.clip(d[v],-500,500))
+        ops["ln("+v+")"]   = lambda d,v=v: np.log(np.where(d[v]>0,d[v],1e-10))
+        ops[v+"^2"]        = lambda d,v=v: d[v]**2
+        ops[v+"^3"]        = lambda d,v=v: d[v]**3
+        ops["sqrt("+v+")"] = lambda d,v=v: np.sqrt(np.abs(d[v]))
+        ops["sin("+v+")"]  = lambda d,v=v: np.sin(d[v])
+        ops["cos("+v+")"]  = lambda d,v=v: np.cos(d[v])
+        ops[v]             = lambda d,v=v: d[v]
+        ops["eml("+v+",1)"]= lambda d,v=v: eml(d[v],np.ones(len(d[v])))
+    vlist=list(X_dict.keys())
+    for i in range(len(vlist)):
+        for j in range(i+1,len(vlist)):
+            v1,v2=vlist[i],vlist[j]; ops[v1+"*"+v2]=lambda d,v1=v1,v2=v2: d[v1]*d[v2]
+    y=np.asarray(y,float); n=len(y); res=[]
+    for nm,fn in ops.items():
         try:
-            xline = np.linspace(xs.min(), xs.max(), 300)
-            t = rel_type["type"]
-            if t == "Linear":
-                slope, intercept, *_ = stats.linregress(xs, ys)
-                yline = slope * xline + intercept
-            elif t == "Logarithmic":
-                xp = np.where(xs > 0, xs, 1e-10)
-                slope, intercept, *_ = stats.linregress(np.log(xp), ys)
-                xline2 = np.where(xline > 0, xline, 1e-10)
-                yline = slope * np.log(xline2) + intercept
-            elif t == "Power Law":
-                xp = np.where(xs > 0, xs, 1e-10)
-                yp = np.where(ys > 0, ys, 1e-10)
-                slope, intercept, *_ = stats.linregress(np.log(xp), np.log(yp))
-                xline2 = np.where(xline > 0, xline, 1e-10)
-                yline = np.exp(intercept) * xline2**slope
-            elif t == "Exponential":
-                yp = np.where(ys > 0, ys, 1e-10)
-                slope, intercept, *_ = stats.linregress(xs, np.log(yp))
-                yline = np.exp(intercept + slope * xline)
-            elif t == "Polynomial":
-                coeffs = np.polyfit(xs, ys, 2)
-                yline = np.polyval(coeffs, xline)
-            else:
-                yline = None
+            f=np.asarray(fn(X_dict),float)
+            if np.any(np.isnan(f))|np.any(np.isinf(f)): continue
+            A=np.column_stack([f,np.ones(n)]); c,_,_,_=np.linalg.lstsq(A,y,rcond=None)
+            a,b=float(c[0]),float(c[1]); yp=a*f+b
+            ss_r=np.sum((y-yp)**2); ss_t=np.sum((y-np.mean(y))**2)
+            r2=float(1-ss_r/ss_t) if ss_t>0 else 1.0
+            if r2>=min_r2:
+                if abs(a-1)<0.005 and abs(b)<0.005: fs="y = "+nm
+                elif abs(b)<0.005: fs="y = %.3f*%s" % (a,nm)
+                elif b<0: fs="y = %.3f*%s - %.3f" % (a,nm,abs(b))
+                else: fs="y = %.3f*%s + %.3f" % (a,nm,b)
+                res.append({"formula":fs,"r2":round(r2,6),"accuracy":"%.4f%%" % (r2*100),
+                    "quality":"PERFECT" if r2>0.9999 else "GREAT" if r2>0.99 else "GOOD"})
+        except: pass
+    res.sort(key=lambda d:d["r2"],reverse=True); return res[:top_n]
 
-            if yline is not None:
-                ax.plot(xline, yline, color=SECONDARY, lw=2.5,
-                        label=f"{t} trend", zorder=4, linestyle="--")
-        except:
-            pass
-
-    ax.set_xlabel(x_col, color=TEXT, fontsize=11, labelpad=8)
-    ax.set_ylabel(y_col, color=TEXT, fontsize=11, labelpad=8)
-    ax.set_title(f"{x_col}  →  {y_col}", color=DOT, fontsize=13, fontweight="bold", pad=14)
-    ax.tick_params(colors=LIGHT, labelsize=9)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_edgecolor(GRID)
-    ax.spines["bottom"].set_edgecolor(GRID)
-    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
-    ax.set_axisbelow(True)
-    ax.legend(facecolor=BG, labelcolor=TEXT, fontsize=9, framealpha=1,
-              edgecolor=GRID)
-
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=BG)
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode()
-
-
-def make_heatmap_b64(df):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    BG = "#FFFFFF"
-    TEXT = "#374151"
-    GRID = "#F3F4F6"
-
-    numeric = df.select_dtypes(include=[np.number])
-    corr = numeric.corr()
-    n = len(corr)
-    if n < 2:
-        return ""
-
-    fig, ax = plt.subplots(figsize=(max(5, n * 1.1), max(4, n * 0.9)))
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(BG)
-
-    cmap = plt.cm.RdYlGn
-    im = ax.imshow(corr.values, cmap=cmap, vmin=-1, vmax=1, aspect="auto")
-    cbar = plt.colorbar(im, ax=ax, fraction=0.04, pad=0.03)
-    cbar.ax.tick_params(labelsize=8, colors=TEXT)
-
-    ax.set_xticks(range(n))
-    ax.set_yticks(range(n))
-    ax.set_xticklabels(corr.columns, rotation=40, ha="right", color=TEXT, fontsize=9)
-    ax.set_yticklabels(corr.columns, color=TEXT, fontsize=9)
-    ax.set_title("Correlation Matrix", color=TEXT, fontsize=12, fontweight="bold", pad=14)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_edgecolor(GRID)
-    ax.spines["bottom"].set_edgecolor(GRID)
-
-    for i in range(n):
-        for j in range(n):
-            val = corr.values[i, j]
-            color = "white" if abs(val) > 0.65 else TEXT
-            ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                    color=color, fontsize=8, fontweight="bold")
-
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=BG)
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode()
-
-
-def call_claude_insight(x_col, y_col, rel_type, r2, sector, user_question, n_rows):
+def make_chart_b64(X_dict, y_true, model=None):
     try:
-        import anthropic
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            return fallback_insight(x_col, y_col, rel_type, r2)
+        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+        vlist=list(X_dict.keys()); x_vals=np.asarray(X_dict[vlist[0]],float)
+        y_arr=np.asarray(y_true,float); sidx=np.argsort(x_vals); xs,ys=x_vals[sidx],y_arr[sidx]
+        fig,axes=plt.subplots(1,2,figsize=(12,4)); fig.patch.set_facecolor("#0D1B2A")
+        ax=axes[0]; ax.set_facecolor("#112233")
+        ax.scatter(xs,ys,color="#00e5ff",s=25,alpha=0.7,label="Data",zorder=5)
+        if model is not None:
+            try:
+                yp=model.predict({vlist[0]:xs}); r2=model.r2(X_dict,y_arr)
+                ax.plot(xs,yp,color="#ff6b6b",lw=2.5,label="Fit R\u00B2=%.4f"%r2,zorder=4)
+            except: pass
+        ax.set_title("Data vs Fit (%s)"%vlist[0],color="white",fontsize=11)
+        ax.set_xlabel(vlist[0],color="#888"); ax.set_ylabel("y",color="#888")
+        ax.tick_params(colors="#888"); ax.legend(facecolor="#1a1a2e",labelcolor="white",fontsize=8)
+        for s in ax.spines.values(): s.set_edgecolor("#333355")
+        ax2=axes[1]; ax2.set_facecolor("#112233")
+        if model is not None:
+            try:
+                res2=ys-model.predict({vlist[0]:xs}); ax2.bar(range(len(res2)),res2,color="#1B9AAA",alpha=0.7)
+                ax2.axhline(0,color="#ff6b6b",lw=1.5,ls="--"); ax2.set_title("Residuals",color="white",fontsize=11)
+            except: ax2.set_title("Residuals (unavailable)",color="#888",fontsize=11)
+        else: ax2.set_title("Residuals (no model)",color="#888",fontsize=11)
+        ax2.tick_params(colors="#888")
+        for s in ax2.spines.values(): s.set_edgecolor("#333355")
+        plt.tight_layout(); buf=io.BytesIO()
+        plt.savefig(buf,format="png",dpi=100,bbox_inches="tight",facecolor="#0D1B2A")
+        plt.close(fig); buf.seek(0); data=base64.b64encode(buf.read()).decode(); buf.close(); return data
+    except Exception as ex:
+        try:
+            import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+            fig2,ax3=plt.subplots(figsize=(6,2)); fig2.patch.set_facecolor("#0D1B2A"); ax3.set_facecolor("#0D1B2A")
+            ax3.text(0.5,0.5,"Chart error: %s"%str(ex),color="#EF4444",ha="center",va="center",transform=ax3.transAxes,fontsize=9)
+            ax3.axis("off"); buf2=io.BytesIO()
+            plt.savefig(buf2,format="png",dpi=80,bbox_inches="tight",facecolor="#0D1B2A")
+            plt.close(fig2); buf2.seek(0); return base64.b64encode(buf2.read()).decode()
+        except: return ""
 
-        client = anthropic.Anthropic(api_key=api_key)
-        confidence_label = "strong" if r2 > 0.8 else "moderate" if r2 > 0.5 else "weak"
-
-        prompt = f"""You are a world-class management consultant and data scientist with deep expertise across ALL domains: business, finance, economics, psychology, sociology, operations, marketing, medicine, engineering, and more.
-
-A manager uploaded a business dataset with {n_rows} rows for analysis.
-- Variable being explained (Y): "{y_col}"
-- Variable used to explain it (X): "{x_col}"
-- Best relationship pattern detected: {rel_type.get('type', 'unknown')}
-- Hypothetical formula: {rel_type.get('formula', 'n/a')}
-- Confidence (R²): {round(r2*100,1)}% — {confidence_label} correlation
-- Industry/sector: {sector if sector else 'not specified'}
-- Manager's question: {user_question if user_question else 'not specified'}
-
-Write a sharp, executive-level insight in flowing prose (no bullet points). Cover:
-1. What this correlation likely means in a real business context
-2. Why this specific relationship TYPE (linear/exponential/etc.) matters — what does the shape tell us?
-3. What could be driving this — direct cause, indirect effect, or hidden variable?
-4. One non-obvious insight a junior analyst would miss
-5. One concrete action management could take based on this finding
-
-Write in a mix of English and Italian (alternate paragraphs). Be bold, specific, and compelling.
-Max 260 words. No bullet points — only flowing paragraphs."""
-
-        message = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return message.content[0].text
-    except Exception as e:
-        return fallback_insight(x_col, y_col, rel_type, r2)
-
-
-def fallback_insight(x_col, y_col, rel_type, r2):
-    t = rel_type.get("type", "unknown")
-    conf = round(r2 * 100, 1)
-    strength = "strong" if r2 > 0.8 else "moderate" if r2 > 0.5 else "weak"
-    return (
-        f"A {strength} {t.lower()} correlation ({conf}%) was detected between "
-        f"{x_col} and {y_col}.\n\n"
-        f"Una correlazione {strength} di tipo {t.lower()} ({conf}%) è stata rilevata "
-        f"tra {x_col} e {y_col}.\n\n"
-        f"This pattern suggests that as {x_col} changes, {y_col} follows a "
-        f"{t.lower()} trend. Remember: correlation does not imply causation — "
-        f"always validate with your domain knowledge before acting.\n\n"
-        f"To unlock full AI-powered insights, ensure the ANTHROPIC_API_KEY "
-        f"environment variable is set on your server."
-    )
-
-
-def read_uploaded_file(file_bytes, filename):
-    """Read CSV or Excel file and return a DataFrame."""
-    fname = filename.lower()
-    if fname.endswith(".xlsx") or fname.endswith(".xls"):
-        return pd.read_excel(io.BytesIO(file_bytes))
-    else:
-        raw = file_bytes.decode("utf-8", errors="replace")
-        return pd.read_csv(io.StringIO(raw))
-
-
-# ─────────────────────── HTML ───────────────────────
+# ─────────────────────────── HTML PAGE ───────────────────────────
 
 HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SumUp Insights</title>
+<title>Formula Finder</title>
+<!-- PapaParse: robust CSV parsing (handles quotes, BOM, semicolons) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
-:root{
-  --white:#ffffff;
-  --bg:#F9FAFB;
-  --border:#E5E7EB;
-  --card:#ffffff;
-  --text:#111827;
-  --muted:#6B7280;
-  --light:#9CA3AF;
-  --purple:#7B2FBE;
-  --purple-light:#F3E8FF;
-  --purple-mid:#A855F7;
-  --green:#059669;
-  --red:#DC2626;
-  --amber:#D97706;
-  --radius:12px;
-}
+:root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;font-size:15px}
+body{background:var(--bg);color:var(--white);font-family:'Segoe UI',sans-serif;min-height:100vh}
+header{background:var(--mid);border-bottom:2px solid var(--teal);padding:16px 32px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:1.5rem;letter-spacing:3px}
+header span{font-size:.72rem;color:var(--neon);border:1px solid var(--neon);border-radius:20px;padding:3px 12px}
+.container{max-width:1100px;margin:0 auto;padding:28px 20px}
 
-/* Header */
-header{background:var(--white);border-bottom:1px solid var(--border);padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{display:flex;align-items:center;gap:10px}
-.logo-mark{width:28px;height:28px;background:var(--purple);border-radius:6px;display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:13px}
-.logo-text{font-size:1rem;font-weight:700;color:var(--text);letter-spacing:-.3px}
-.logo-sub{font-size:.72rem;color:var(--muted);margin-left:6px;font-weight:400}
-.header-badge{font-size:.7rem;background:var(--purple-light);color:var(--purple);border-radius:20px;padding:3px 10px;font-weight:600}
+/* ── How it works accordion ── */
+.how-box{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;margin-bottom:24px;overflow:hidden}
+.how-toggle{width:100%;background:none;border:none;color:var(--teal);font-size:.88rem;font-weight:700;letter-spacing:1px;text-align:left;padding:14px 20px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.how-toggle:hover{background:#1a2f4a}
+.how-arrow{transition:transform .3s;font-size:.75rem;display:inline-block}
+.how-body{display:none;padding:16px 20px 18px;border-top:1px solid #1e3a5f}
+.how-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-bottom:14px}
+.how-card{background:var(--mid);border-radius:10px;padding:12px 14px}
+.how-step{font-size:.68rem;color:var(--neon);font-weight:700;letter-spacing:1px;margin-bottom:5px}
+.how-card p{font-size:.8rem;color:var(--silver);line-height:1.55}
+.how-card strong{color:var(--white)}
+.how-card code{background:#0d1b2a;color:var(--neon);padding:1px 5px;border-radius:3px;font-size:.78rem}
+.how-warn{font-size:.78rem;color:var(--amber);background:#1e1a0a;border-left:3px solid var(--amber);padding:10px 14px;border-radius:6px;margin-top:4px;line-height:1.6}
 
-.container{max-width:1080px;margin:0 auto;padding:32px 20px}
-
-/* How it works */
-.how-section{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;margin-bottom:24px}
-.how-section h2{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:16px}
-.steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-.step{display:flex;gap:12px;align-items:flex-start}
-.step-num{width:28px;height:28px;min-width:28px;background:var(--purple-light);color:var(--purple);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800}
-.step-body h4{font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:3px}
-.step-body p{font-size:.78rem;color:var(--muted);line-height:1.55}
-
-/* Sample data */
-.sample-section{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:20px 28px;margin-bottom:20px}
-.sample-section h2{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
-.sample-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.sample-select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.85rem;flex:1;min-width:220px;max-width:380px}
-.sample-select:focus{outline:none;border-color:var(--purple)}
-.btn-ghost{background:var(--white);color:var(--purple);border:1px solid var(--purple);border-radius:8px;padding:8px 20px;cursor:pointer;font-weight:600;font-size:.82rem;transition:.15s}
-.btn-ghost:hover{background:var(--purple-light)}
-
-/* Upload */
-.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:36px;text-align:center;background:var(--white);margin-bottom:20px;transition:.2s;cursor:pointer}
-.upload-zone:hover,.upload-zone.dragover{border-color:var(--purple);background:var(--purple-light)}
-.upload-zone h2{color:var(--text);font-size:1rem;font-weight:600;margin-bottom:6px}
-.upload-zone p{color:var(--muted);font-size:.83rem;margin-top:4px}
+/* ── Upload zone ── */
+.upload-zone{border:2px dashed var(--teal);border-radius:14px;padding:44px 32px;text-align:center;background:var(--card);margin-bottom:24px;transition:.2s}
+.upload-zone.dragover{border-color:var(--neon);background:#1a2f4a}
+.upload-zone h2{color:var(--teal);margin-bottom:6px;font-size:1.3rem}
+.upload-zone p{color:var(--silver);font-size:.88rem;margin-top:6px}
 #fi{display:none}
-.btn-primary{display:inline-block;margin-top:14px;background:var(--purple);color:white;padding:10px 28px;border-radius:8px;cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s;border:none;letter-spacing:.01em}
-.btn-primary:hover{background:var(--purple-mid)}
-.btn-primary:disabled{opacity:.5;cursor:not-allowed}
-#fn{margin-top:10px;color:var(--purple);font-weight:600;min-height:20px;font-size:.85rem}
+.upload-label{display:inline-block;margin-top:16px;background:var(--teal);color:var(--bg);padding:11px 30px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.95rem;transition:.2s;letter-spacing:.5px}
+.upload-label:hover{background:var(--neon)}
+#fn{margin-top:12px;color:var(--neon);font-weight:600;min-height:22px;font-size:.9rem}
 
-/* Preview */
-.preview-box{display:none;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;overflow-x:auto}
-.preview-box h4{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
-.preview-table{border-collapse:collapse;font-size:.78rem;width:100%}
-.preview-table th{background:var(--bg);color:var(--muted);padding:6px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase}
-.preview-table td{color:var(--text);padding:5px 12px;border-bottom:1px solid var(--bg)}
-.preview-meta{font-size:.72rem;color:var(--light);margin-top:8px}
+/* ── CSV mini-preview ── */
+.preview-box{display:none;background:var(--mid);border:1px solid #1e3a5f;border-radius:10px;padding:14px;margin-bottom:20px;overflow-x:auto}
+.preview-box h4{color:var(--teal);font-size:.78rem;letter-spacing:1px;margin-bottom:10px}
+.preview-table{border-collapse:collapse;font-size:.75rem;width:100%}
+.preview-table th{background:#0d1b2a;color:var(--neon);padding:5px 10px;text-align:left;border-bottom:1px solid #1e3a5f}
+.preview-table td{color:var(--silver);padding:4px 10px;border-bottom:1px solid #162840}
+.preview-table tr:last-child td{border-bottom:none}
+.preview-meta{font-size:.72rem;color:var(--silver);margin-top:8px;opacity:.7}
 
-/* Wizard */
-.wizard-box{display:none;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;margin-bottom:20px}
-.wizard-box h2{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:16px}
-.wizard-q{margin-bottom:16px}
-.wizard-q label{display:block;font-size:.83rem;font-weight:600;color:var(--text);margin-bottom:8px}
-.sector-grid{display:flex;flex-wrap:wrap;gap:8px}
-.sector-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 14px;cursor:pointer;color:var(--muted);font-size:.8rem;transition:.15s;font-weight:500}
-.sector-btn:hover{border-color:var(--purple);color:var(--purple)}
-.sector-btn.active{border-color:var(--purple);color:var(--purple);background:var(--purple-light);font-weight:600}
-.wizard-input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:.85rem;transition:.15s}
-.wizard-input:focus{outline:none;border-color:var(--purple)}
+/* ── Configure columns ── */
+.col-select{display:none;background:var(--card);border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid var(--teal)}
+.col-select h3{color:var(--teal);margin-bottom:18px;letter-spacing:1px;font-size:1rem}
+.col-row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-start}
+.col-group{display:flex;flex-direction:column;gap:6px;min-width:150px}
+.col-group > label{color:var(--silver);font-size:.8rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase}
+select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:9px 12px;font-size:.88rem;width:100%;transition:.2s}
+select:focus{outline:none;border-color:var(--teal)}
+.hint{font-size:.72rem;color:var(--silver);opacity:.7;margin-top:2px}
 
-/* Configure */
-.col-select{display:none;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;margin-bottom:20px}
-.col-select h2{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:16px}
-.col-row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px;align-items:flex-start}
-.col-group{display:flex;flex-direction:column;gap:5px;min-width:150px}
-.col-group > label{color:var(--text);font-size:.8rem;font-weight:600}
-select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.85rem;width:100%;transition:.15s}
-select:focus{outline:none;border-color:var(--purple)}
-.hint{font-size:.72rem;color:var(--light);margin-top:2px}
-.val-msg{display:none;color:var(--red);font-size:.8rem;margin-top:8px;padding:8px 12px;background:#FEF2F2;border-radius:6px;border-left:3px solid var(--red)}
+/* ── Live formula preview ── */
+.formula-preview{font-size:.8rem;color:var(--silver);background:var(--mid);border-radius:6px;padding:7px 12px;margin-top:10px;margin-bottom:4px;min-height:22px;font-family:monospace;border-left:3px solid var(--teal)}
 
-/* Spinner */
-.spinner{display:none;text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
-.spinner-ring{display:inline-block;width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin .7s linear infinite;margin-right:10px;vertical-align:middle}
+/* ── Validation msg ── */
+.val-msg{display:none;color:var(--red);font-size:.82rem;margin-top:8px;padding:8px 12px;background:#2a1018;border-radius:6px;border-left:3px solid var(--red)}
+
+.run-btn{background:var(--neon);color:var(--bg);border:none;padding:13px 38px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.95rem;margin-top:4px;letter-spacing:1px;transition:.2s}
+.run-btn:hover{background:var(--teal);color:#fff}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── Spinner ── */
+.spinner{display:none;text-align:center;padding:36px;color:var(--teal);font-size:1rem}
+.spinner::after{content:'';display:inline-block;width:20px;height:20px;border:3px solid var(--teal);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-left:10px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
-.error-box{background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius);padding:14px 18px;color:var(--red);margin-bottom:16px;font-size:.85rem}
 
-/* Results */
+/* ── Results ── */
 .results{display:none}
+.best-box{background:linear-gradient(135deg,var(--teal),#0d7a85);border-radius:14px;padding:24px 28px;margin-bottom:20px}
+.best-box h2{font-size:.8rem;letter-spacing:3px;color:rgba(0,0,0,.6);margin-bottom:10px;text-transform:uppercase}
+.best-formula{font-size:1.1rem;font-weight:700;color:var(--bg);font-family:monospace;word-break:break-all;line-height:1.6;max-height:120px;overflow:hidden;transition:max-height .4s ease}
+.best-formula.expanded{max-height:2000px}
+.expand-btn{background:rgba(0,0,0,.15);border:none;color:var(--bg);font-size:.78rem;cursor:pointer;margin-top:8px;padding:4px 12px;border-radius:20px;font-weight:600}
+.expand-btn:hover{background:rgba(0,0,0,.25)}
+.best-r2{font-size:.92rem;color:rgba(0,0,0,.6);margin-top:8px}
 
-.result-hero{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:28px 32px;margin-bottom:20px}
-.result-eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
-.result-type{font-size:1.5rem;font-weight:700;color:var(--text);margin-bottom:6px}
-.result-formula{font-family:'SF Mono',Monaco,monospace;font-size:.9rem;color:var(--purple);background:var(--purple-light);display:inline-block;padding:5px 14px;border-radius:6px;margin-bottom:16px}
-.conf-wrap{max-width:380px;margin-bottom:6px}
-.conf-track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;border:1px solid var(--border)}
-.conf-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--purple),var(--purple-mid));transition:width 1s ease}
-.conf-label{font-size:.78rem;color:var(--muted);margin-top:5px}
-.result-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
-.btn-sm{background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:.78rem;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;transition:.15s}
-.btn-sm:hover{border-color:var(--purple);color:var(--purple)}
+/* Copy + Export buttons */
+.result-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.action-btn{background:rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.25);color:var(--bg);font-size:.78rem;font-weight:700;padding:6px 16px;border-radius:20px;cursor:pointer;transition:.2s;letter-spacing:.4px}
+.action-btn:hover{background:rgba(0,0,0,.32)}
+.action-btn.copied{background:rgba(0,0,0,.35)}
 
-/* Panels */
-.panels-row{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
-@media(max-width:680px){.panels-row{grid-template-columns:1fr}}
-.panel-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px}
-.panel-card h3{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:14px}
-.panel-card img{width:100%;border-radius:8px;border:1px solid var(--border)}
-.insight-text{font-size:.83rem;color:var(--muted);line-height:1.85;white-space:pre-wrap}
-.insight-loading{color:var(--purple);font-size:.83rem;animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* ── Chart ── */
+.chart-box{background:var(--card);border-radius:14px;padding:20px;margin-bottom:20px;border:1px solid #1e3a5f}
+.chart-box h3{color:var(--teal);margin-bottom:12px;letter-spacing:1px;font-size:.95rem}
+.chart-box img{width:100%;border-radius:8px;display:block}
+.chart-err{color:var(--silver);font-size:.85rem;padding:20px;text-align:center;background:var(--mid);border-radius:8px}
 
-/* Heatmap */
-.full-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px}
-.full-card h3{font-size:.75rem;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:14px}
-.full-card img{width:100%;border-radius:8px;border:1px solid var(--border)}
+/* ── Top terms ── */
+.terms-box{background:var(--card);border-radius:14px;padding:20px;margin-bottom:20px;border:1px solid #1e3a5f}
+.terms-box h3{color:var(--teal);margin-bottom:14px;letter-spacing:1px;font-size:.95rem}
+.term-row{display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #1a2f4a}
+.term-name{font-family:monospace;color:var(--white);min-width:150px;font-size:.82rem}
+.term-bar-wrap{flex:1;margin:0 14px;height:7px;background:#1a2f4a;border-radius:4px;overflow:hidden}
+.term-bar{height:100%;background:linear-gradient(90deg,var(--teal),var(--neon));border-radius:4px;transition:width .6s ease}
+.term-w{color:var(--amber);font-size:.8rem;min-width:90px;text-align:right;font-family:monospace}
 
-/* Top correlations */
-.corr-row{display:flex;align-items:center;padding:9px 0;border-bottom:1px solid var(--bg);gap:12px}
-.corr-pair{font-size:.8rem;color:var(--text);min-width:220px;font-weight:500}
-.corr-bar-wrap{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
-.corr-bar-pos{height:100%;background:var(--purple);border-radius:3px}
-.corr-bar-neg{height:100%;background:var(--red);border-radius:3px}
-.corr-val{font-size:.78rem;min-width:52px;text-align:right;font-weight:700}
-.corr-val.pos{color:var(--purple)}
-.corr-val.neg{color:var(--red)}
+/* ── Cards ── */
+.cards-section h3{color:var(--teal);margin-bottom:14px;letter-spacing:1px;font-size:.95rem}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid #1e3a5f;border-radius:10px;padding:16px;transition:.2s;cursor:default}
+.card:hover{border-color:var(--teal);transform:translateY(-2px)}
+.card-rank{font-size:.72rem;color:var(--silver);letter-spacing:1px;margin-bottom:4px}
+.card-formula{font-family:monospace;font-size:.88rem;color:var(--white);margin:6px 0;word-break:break-all;line-height:1.5}
+.card-r2{font-size:.78rem;margin-top:4px}
+.qp{color:var(--neon)}.qg{color:#2ecc71}.qb{color:var(--amber)}
+.badge{display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:20px;font-weight:700;margin-right:6px}
+.badge-p{background:rgba(6,214,160,.15);color:var(--neon)}
+.badge-g{background:rgba(46,204,113,.15);color:#2ecc71}
+.badge-b{background:rgba(252,211,77,.15);color:var(--amber)}
 
-/* Strength pill */
-.pill{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 10px;border-radius:20px;margin-left:10px;vertical-align:middle}
-.pill-strong{background:#D1FAE5;color:var(--green)}
-.pill-moderate{background:#FEF3C7;color:var(--amber)}
-.pill-weak{background:#FEE2E2;color:var(--red)}
+/* ── Error ── */
+.error-box{background:#2a1018;border:1px solid var(--red);border-radius:10px;padding:14px 16px;color:var(--red);margin-bottom:16px;font-size:.88rem}
 
-footer{text-align:center;padding:28px;color:var(--light);font-size:.75rem;border-top:1px solid var(--border);margin-top:16px}
+
+/* ── Predict & Explain panels ── */
+.action-panels{display:none;gap:18px;margin-bottom:20px;flex-wrap:wrap}
+.action-panels.visible{display:flex}
+.panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px;flex:1;min-width:280px}
+.panel h3{color:var(--teal);font-size:.85rem;letter-spacing:1px;margin-bottom:16px;font-weight:700}
+.input-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.input-row{display:flex;align-items:center;gap:10px}
+.input-row label{color:var(--silver);font-size:.78rem;min-width:90px;font-family:monospace}
+.input-row input{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:6px;padding:7px 10px;font-size:.85rem;width:100%;transition:.2s}
+.input-row input:focus{outline:none;border-color:var(--teal)}
+.predict-result{font-size:1.4rem;font-weight:700;color:var(--neon);font-family:monospace;margin:10px 0 4px}
+.predict-label{font-size:.75rem;color:var(--silver)}
+.sens-row{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid #1a2f4a;gap:10px}
+.sens-name{font-family:monospace;color:var(--white);font-size:.78rem;min-width:100px}
+.sens-bar-wrap{flex:1;height:6px;background:#1a2f4a;border-radius:3px;overflow:hidden}
+.sens-bar{height:100%;border-radius:3px;transition:width .5s ease}
+.sens-bar.pos{background:var(--neon)}
+.sens-bar.neg{background:var(--red)}
+.sens-val{font-size:.75rem;color:var(--silver);font-family:monospace;min-width:70px;text-align:right}
+.explain-box{font-size:.82rem;color:var(--silver);line-height:1.7;white-space:pre-wrap;background:var(--mid);border-radius:8px;padding:14px;border-left:3px solid var(--teal)}
+.panel-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:7px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;margin-top:4px}
+.panel-btn:hover{background:var(--neon)}
+.panel-btn:disabled{opacity:.5;cursor:not-allowed}
+footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;border-top:1px solid #1e3a5f;margin-top:40px}
+
+@media(max-width:600px){
+  header h1{font-size:1.1rem}
+  .col-row{flex-direction:column}
+  .col-group{min-width:100%}
+  .best-formula{font-size:.95rem}
+}
+
+/* ── Template download panel ── */
+.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:20px 24px;margin-bottom:24px}
+.tpl-panel h3{color:var(--teal);font-size:.88rem;letter-spacing:1px;margin-bottom:4px;font-weight:700}
+.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:14px}
+.tpl-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:9px 12px;font-size:.85rem;flex:1;min-width:200px;max-width:420px}
+.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:8px;padding:6px 10px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none}
+.tpl-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;white-space:nowrap}
+.tpl-btn:hover{background:var(--neon)}
+
+/* ── Data Quality Gate ── */
+.dq-panel{display:none;background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px 28px;margin-bottom:20px}
+.dq-title{font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--white);margin-bottom:16px}
+.dq-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1a2f4a;font-size:.8rem}
+.dq-row:last-child{border-bottom:none}
+.dq-icon{font-size:1rem;min-width:20px;text-align:center}
+.dq-label{color:var(--silver);min-width:130px;font-size:.78rem;letter-spacing:.3px}
+.dq-value{color:var(--white);flex:1;font-size:.78rem}
+.dq-ok{color:#06D6A0}.dq-warn{color:#FCD34D}.dq-err{color:#EF4444}
+.dq-score-bar{height:6px;border-radius:3px;background:#1a2f4a;margin:14px 0 4px;overflow:hidden}
+.dq-score-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.dq-score-label{font-size:.72rem;color:var(--silver);text-align:right}
+.dq-blocker{display:none;background:#2a1018;border:1px solid #EF4444;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#EF4444;line-height:1.6}
+.dq-warning{display:none;background:#1e1a0a;border:1px solid #FCD34D;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#FCD34D;line-height:1.6}
 </style>
 </head>
 <body>
-
 <header>
-  <div class="logo">
-    <div class="logo-mark">S+</div>
-    <span class="logo-text">SumUp Insights<span class="logo-sub">by FormulaFinder</span></span>
-  </div>
-  <span class="header-badge">Powered by Claude AI</span>
+  <h1>FORMULA FINDER</h1>
+  <span>Powered by EML + Adam</span>
 </header>
-
 <div class="container">
-
-  <!-- HOW IT WORKS -->
-  <div class="how-section">
-    <h2>How it works / Come funziona</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-body">
-          <h4>Upload your data</h4>
-          <p>Drop a CSV or Excel file. The first row must contain column names. All data must be numeric.<br><em>Carica un file CSV o Excel con la prima riga come intestazione.</em></p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-body">
-          <h4>Give context</h4>
-          <p>Tell us your sector and what you want to understand. The AI uses this to tailor its analysis.<br><em>Indica il settore e la domanda di business che vuoi rispondere.</em></p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-body">
-          <h4>Choose your variables</h4>
-          <p>Select which metric to explain (Y) and which factors might drive it (X).<br><em>Scegli la metrica da spiegare e i fattori potenzialmente correlati.</em></p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-body">
-          <h4>Discover correlations</h4>
-          <p>SumUp finds the best pattern, visualises it, and gives you an expert explanation.<br><em>SumUp trova il pattern, lo visualizza e ti spiega cosa significa.</em></p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SAMPLE DATA -->
-  <div class="sample-section">
-    <h2>No file yet? Explore a sample / Nessun file? Prova un esempio</h2>
-    <div class="sample-row">
-      <select class="sample-select" id="sampleSelect">
-        <option value="">— Select a sample dataset —</option>
-        <option value="energy">Energy consumption vs cost</option>
-        <option value="realestate">Real estate: size, location, price</option>
-        <option value="health">Health: sleep, stress, performance</option>
-        <option value="marketing">Marketing: spend vs conversions</option>
+  <!-- ── Template Download Panel ── -->
+  <div class="tpl-panel">
+    <h3>&#128204; NON HAI UN FILE? SCARICA UN ESEMPIO</h3>
+    <p>Scegli un template, scaricalo, compila con i tuoi dati reali e caricalo sopra.</p>
+    <div class="tpl-row">
+      <select class="tpl-select" id="tplSelect" onchange="updateTplDesc()">
+        <option value="">— Scegli un esempio —</option>
+        <option value="bolletta_elettrica.csv" data-desc="Scopri il costo al kWh dalla tua bolletta elettrica">&#128161; Bolletta elettrica</option>
+        <option value="consumo_benzina.csv" data-desc="Calcola quanto spendi per ogni km percorso">&#128664; Consumo benzina</option>
+        <option value="spesa_supermercato.csv" data-desc="Stima la spesa settimanale in base al numero di persone in casa">&#128717; Spesa supermercato</option>
+        <option value="rata_mutuo.csv" data-desc="Trova la formula della rata mensile del mutuo">&#128179; Rata mutuo</option>
+        <option value="risparmio_mensile.csv" data-desc="Calcola quanto riesci a risparmiare ogni mese">&#128167; Risparmio mensile</option>
+        <option value="stipendio_esperienza.csv" data-desc="Come cresce lo stipendio con gli anni di esperienza">&#128200; Stipendio per esperienza</option>
+        <option value="bmi.csv" data-desc="Indice di massa corporea: formula peso/altezza&#178;">&#9878; BMI</option>
+        <option value="calorie_camminata.csv" data-desc="Calorie bruciate camminando in base a peso e distanza">&#128293; Calorie camminando</option>
+        <option value="media_voti.csv" data-desc="Calcola la media scolastica da voti e materie">&#128218; Media voti</option>
+        <option value="studio_vs_voto.csv" data-desc="Quanto studio serve per ottenere un buon voto?">&#9201; Studio vs Voto</option>
+        <option value="consumo_acqua.csv" data-desc="Litri d&#39;acqua consumati per numero di persone in casa">&#128167; Consumo acqua</option>
+        <option value="gas_riscaldamento.csv" data-desc="Consumo di gas in inverno in base alla temperatura esterna">&#127777; Gas riscaldamento</option>
       </select>
-      <button class="btn-ghost" onclick="loadSample()">Load sample</button>
+      <button class="tpl-btn" onclick="downloadTemplate()">&#8681; Scarica template</button>
+    </div>
+    <div class="tpl-desc" id="tplDesc"></div>
+  </div>
+
+
+
+  <!-- ── How it works accordion ── -->
+  <div class="how-box">
+    <button class="how-toggle" id="howToggle" onclick="toggleHow()">
+      &#128161; HOW TO USE FORMULA FINDER
+      <span class="how-arrow" id="howArrow">&#9660;</span>
+    </button>
+    <div class="how-body" id="howBody">
+      <div class="how-grid">
+        <div class="how-card">
+          <div class="how-step">STEP 1 &mdash; PREPARE YOUR FILE</div>
+          <p>Save your spreadsheet as a <strong>.csv file</strong>, not .xlsx.<br>
+          In Excel: <em>File &rarr; Save As &rarr; CSV UTF-8</em>.<br>
+          The <strong>first row must be column names</strong>. All data must be <strong>numeric</strong>.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-step">STEP 2 &mdash; CHOOSE TARGET Y</div>
+          <p><strong>Y</strong> is the value you want to <strong>predict or explain</strong><br>
+          (e.g. price, temperature, energy output).<br>
+          The app auto-detects it if your column is named <code>Y</code>, <code>target</code> or <code>output</code>.<br>
+          <strong>Y will not appear in the X list</strong> &mdash; that is expected.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-step">STEP 3 &mdash; SELECT X VARIABLES</div>
+          <p><strong>X columns</strong> are the inputs that <strong>drive Y</strong><br>
+          (e.g. time, pressure, quantity).<br>
+          Hold <strong>Cmd &#8984;</strong> (Mac) or <strong>Ctrl</strong> (Windows) to pick multiple columns.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-step">STEP 4 &mdash; RUN &amp; EXPLORE</div>
+          <p><strong>Both</strong> = maximum accuracy (recommended).<br>
+          <strong>Quick</strong> = fast scan of common formulas.<br>
+          After results: <strong>predict</strong> new values, see which variables <strong>impact Y most</strong>, and get a <strong>plain English explanation</strong> of the formula.</p>
+        </div>
+      </div>
+      <div class="how-warn">
+        &#9888;&nbsp;<strong>Excel &amp; semicolons:</strong> if your language settings use <strong>;</strong> as separator (Italian, German, French…), Excel may export CSV with semicolons instead of commas. The app will then see all data as a single column. Fix: open the CSV in a text editor, replace <code>;</code> with <code>,</code> &mdash; or choose <em>CSV UTF-8 (comma delimited)</em> when saving.<br><br>
+        &#9888;&nbsp;<strong>Column named &ldquo;Y&rdquo;:</strong> if one of your input variables is called <code>Y</code> (e.g. a geometric Y coordinate), rename it to something like <code>coord_y</code> before uploading, otherwise it will be auto-selected as the target variable.
+      </div>
     </div>
   </div>
 
-  <!-- UPLOAD -->
+  <!-- ── Upload ── -->
   <div class="upload-zone" id="dropZone">
-    <h2>Drop your file here</h2>
-    <p>Supports CSV and Excel (.xlsx) &nbsp;|&nbsp; Trascina qui il tuo file CSV o Excel</p>
-    <input type="file" id="fi" accept=".csv,.xlsx,.xls">
-    <label for="fi" class="btn-primary">Choose file / Scegli file</label>
+    <h2>&#128196; Drop your CSV file here</h2>
+    <p>or click the button below to browse</p>
+    <input type="file" id="fi" accept=".csv">
+    <label for="fi" class="upload-label">&#128193; Choose File</label>
     <p id="fn"></p>
   </div>
 
-  <!-- PREVIEW -->
+  <!-- ── CSV mini-preview ── -->
   <div class="preview-box" id="previewBox">
-    <h4>File preview / Anteprima</h4>
+    <h4>&#128202; FILE PREVIEW</h4>
     <div id="previewTable"></div>
     <div class="preview-meta" id="previewMeta"></div>
   </div>
 
-  <!-- CONTEXT WIZARD -->
-  <div class="wizard-box" id="wizardBox">
-    <h2>Add context for better insights / Aggiungi contesto</h2>
-    <div class="wizard-q">
-      <label>1. What is your sector? / In quale settore lavori?</label>
-      <div class="sector-grid" id="sectorGrid">
-        <div class="sector-btn" onclick="selectSector(this,'Finance')">Finance</div>
-        <div class="sector-btn" onclick="selectSector(this,'Health')">Health</div>
-        <div class="sector-btn" onclick="selectSector(this,'Energy')">Energy</div>
-        <div class="sector-btn" onclick="selectSector(this,'Marketing')">Marketing</div>
-        <div class="sector-btn" onclick="selectSector(this,'Operations')">Operations</div>
-        <div class="sector-btn" onclick="selectSector(this,'Real Estate')">Real Estate</div>
-        <div class="sector-btn" onclick="selectSector(this,'Retail')">Retail</div>
-        <div class="sector-btn" onclick="selectSector(this,'Other')">Other</div>
-      </div>
-    </div>
-    <div class="wizard-q">
-      <label>2. What are you trying to understand? <span style="color:var(--light);font-weight:400">(optional)</span></label>
-      <input class="wizard-input" id="userQuestion"
-        placeholder='e.g. "Why do sales drop on Mondays?" / "Perché le vendite calano il lunedì?"'>
-    </div>
-  </div>
-
-  <!-- CONFIGURE -->
+  <!-- ── Configure Columns ── -->
   <div class="col-select" id="colSel">
-    <h2>Configure analysis / Configura l'analisi</h2>
+    <h3>CONFIGURE COLUMNS</h3>
     <div class="col-row">
       <div class="col-group">
-        <label>Target to explain (Y)</label>
+        <label>&#127919; Target Y</label>
         <select id="yCol" onchange="syncXcols()"></select>
-        <span class="hint">The metric you want to understand</span>
+        <span class="hint">The variable you want to predict</span>
       </div>
-      <div class="col-group" style="flex:1;min-width:200px">
-        <label>Potential drivers (X)</label>
-        <select id="xCols" multiple style="height:100px"></select>
-        <span class="hint">Hold Cmd/Ctrl to select multiple columns</span>
+      <div class="col-group" style="flex:1;min-width:180px">
+        <label>&#128200; Variables X</label>
+        <select id="xCols" multiple style="height:110px"></select>
+        <span class="hint">Cmd/Ctrl to select multiple &nbsp;&bull;&nbsp; Y is automatically excluded</span>
+      </div>
+      <div class="col-group">
+        <label>&#9881; Method</label>
+        <select id="method" onchange="updatePreviewLabel()">
+          <option value="both">Both (Quick + Adam)</option>
+          <option value="quick">Quick only</option>
+          <option value="adam">Adam only</option>
+        </select>
+        <span class="hint">Both = maximum accuracy</span>
       </div>
     </div>
+    <!-- Live selection preview -->
+    <div class="formula-preview" id="selPreview">Select Y and X columns above to preview your setup.</div>
     <div class="val-msg" id="valMsg"></div>
-    <button class="btn-primary" id="runBtn" onclick="run()">Discover correlations</button>
+    <button type="button" class="run-btn" id="runBtn" onclick="run()">&#128269; FIND FORMULA</button>
   </div>
 
-  <div class="spinner" id="spin"><span class="spinner-ring"></span>Analysing your data… / Analisi in corso…</div>
+
+  <!-- ── Data Quality Gate ── -->
+  <div class="dq-blocker" id="dqBlocker"></div>
+  <div class="dq-warning" id="dqWarning"></div>
+  <div class="dq-panel" id="dqPanel">
+    <div class="dq-title">Data Quality Check</div>
+    <div id="dqRows"></div>
+    <div class="dq-score-bar"><div class="dq-score-fill" id="dqFill"></div></div>
+    <div class="dq-score-label" id="dqScoreLabel"></div>
+  </div>
+
+  <div class="spinner" id="spin">Searching&hellip; please wait</div>
   <div class="error-box" id="err" style="display:none"></div>
 
-  <!-- RESULTS -->
+  <!-- ── Results ── -->
   <div class="results" id="res">
-
-    <div class="result-hero">
-      <div class="result-eyebrow">Best hypothetical correlation / Miglior correlazione ipotetica</div>
-      <div class="result-type" id="corrType"></div>
-      <div class="result-formula" id="corrFormula"></div>
-      <div class="conf-wrap">
-        <div class="conf-track"><div class="conf-fill" id="confBar" style="width:0%"></div></div>
-        <div class="conf-label" id="confLabel"></div>
-      </div>
+    <div class="best-box">
+      <h2>Best Formula Found</h2>
+      <div class="best-formula" id="bf"></div>
+      <button class="expand-btn" id="expandBtn" onclick="toggleFormula()" style="display:none">&#9660; Show full formula</button>
+      <div class="best-r2" id="br"></div>
       <div class="result-actions">
-        <button class="btn-sm" onclick="exportResults()">Download results CSV</button>
+        <button class="action-btn" id="copyBtn" onclick="copyFormula()">&#128203; Copy formula</button>
+        <button class="action-btn" onclick="exportCSV()">&#8681; Download results CSV</button>
       </div>
     </div>
 
-    <div class="panels-row">
-      <div class="panel-card">
-        <h3>Correlation chart</h3>
-        <div id="chartWrap"></div>
-      </div>
-      <div class="panel-card">
-        <h3>AI Expert Insight</h3>
-        <div class="insight-text" id="insightText">
-          <span class="insight-loading">Claude is analysing your data…</span>
+    <!-- ── Action panels: Predict · Sensitivity · Explain ── -->
+    <div class="action-panels" id="actionPanels">
+
+      <!-- Predict -->
+      <div class="panel">
+        <h3>PREDICT A NEW VALUE</h3>
+        <div class="input-grid" id="predictInputs"></div>
+        <button class="panel-btn" id="predictBtn" onclick="runPredict()">Calculate</button>
+        <div style="margin-top:14px">
+          <div class="predict-result" id="predictResult" style="display:none"></div>
+          <div class="predict-label" id="predictLabel"></div>
         </div>
       </div>
-    </div>
 
-    <div class="full-card" id="heatmapBox" style="display:none">
-      <h3>Correlation matrix / Matrice di correlazione</h3>
-      <img id="heatmapImg" src="" alt="Correlation matrix">
-    </div>
+      <!-- Sensitivity -->
+      <div class="panel">
+        <h3>VARIABLE IMPACT</h3>
+        <div style="font-size:.75rem;color:var(--silver);margin-bottom:12px">How much does each variable move Y, at current input values?</div>
+        <div id="sensResult"><span style="color:var(--silver);font-size:.8rem">Run a prediction to see impact.</span></div>
+      </div>
 
-    <div class="full-card" id="topCorrBox" style="display:none">
-      <h3>All correlations found / Tutte le correlazioni</h3>
-      <div id="topCorrList"></div>
-    </div>
+      <!-- Explain -->
+      <div class="panel" style="flex:1.2">
+        <h3>PLAIN ENGLISH EXPLANATION</h3>
+        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain this formula</button>
+        <div style="margin-top:14px">
+          <div class="explain-box" id="explainResult" style="display:none"></div>
+        </div>
+      </div>
 
+    </div>
+    <div class="chart-box">
+      <h3>DASHBOARD</h3>
+      <div id="chartWrap"></div>
+    </div>
+    <div class="terms-box">
+      <h3>TOP TERMS &mdash; Adam weights</h3>
+      <div id="tl"></div>
+    </div>
+    <div class="cards-section">
+      <h3>QUICK SEARCH RESULTS</h3>
+      <div class="cards-grid" id="cg"></div>
+    </div>
   </div>
 
 </div>
-
-<footer>SumUp Insights — Data correlation engine for management &nbsp;|&nbsp; FormulaFinder SRL</footer>
+<footer>FormulaFinder &mdash; undoubtedly created by surely not A.G.</footer>
 
 <script>
-var csv = null;
-var allCols = [];
-var selectedSector = '';
-var lastResults = null;
-var uploadedFilename = 'data.csv';
-
-var SAMPLES = {
-  energy: "kwh,cost_eur,temp_c,hour\n100,18,22,8\n200,36,25,12\n350,63,30,15\n500,90,28,18\n750,135,20,20\n1000,180,18,22\n150,27,24,10\n420,75,31,16\n600,108,26,19\n800,144,19,21",
-  realestate: "sqm,distance_center_km,floor,price_eur\n50,1,2,200000\n80,2,4,280000\n60,0.5,1,250000\n100,5,3,220000\n120,3,5,350000\n70,1.5,3,260000\n90,0.8,6,320000\n110,4,2,230000\n75,1.2,3,270000\n130,2.5,7,390000",
-  health: "sleep_hours,stress_score,performance_score,caffeine_cups\n8,2,90,1\n6,7,65,3\n7,5,75,2\n5,9,50,4\n9,1,95,1\n6.5,6,70,3\n7.5,3,85,2\n4,10,40,5\n8.5,2,92,1\n7,4,78,2",
-  marketing: "ad_spend_eur,impressions,clicks,conversions,revenue_eur\n1000,50000,2500,125,3750\n2000,95000,4750,237,7125\n500,22000,1100,55,1650\n3000,140000,7000,350,10500\n1500,70000,3500,175,5250\n2500,115000,5750,287,8625\n800,37000,1850,92,2775\n4000,185000,9250,462,13875"
-};
-
-function loadSample() {
-  var s = document.getElementById('sampleSelect').value;
-  if (!s) { alert('Select a sample first.'); return; }
-  Papa.parse(SAMPLES[s], {
-    header:true, skipEmptyLines:true, dynamicTyping:false,
-    complete: function(result) {
-      csv = Papa.unparse(result.data);
-      uploadedFilename = s + '.csv';
-      allCols = result.meta.fields || [];
-      document.getElementById('fn').textContent = 'Sample loaded: ' + s;
-      showPreview(result);
-      parseCols();
-      document.getElementById('wizardBox').style.display = 'block';
-    }
-  });
-}
+var csv            = null;
+var allCols        = [];
+var parsedData     = null;   // PapaParse result
+var lastResults    = null;
+var formulaExpanded = false;
 
 var fi = document.getElementById('fi');
 var dz = document.getElementById('dropZone');
-fi.addEventListener('change', function(){ if(fi.files && fi.files.length>0) handleFile(fi.files[0]); });
+
+// ── Upload via file input ──
+fi.addEventListener('change', function() {
+  if (fi.files && fi.files.length > 0) handleFile(fi.files[0]);
+});
+
+// ── Drag & Drop ──
 dz.addEventListener('dragover',  function(e){ e.preventDefault(); dz.classList.add('dragover'); });
 dz.addEventListener('dragleave', function(){ dz.classList.remove('dragover'); });
 dz.addEventListener('drop', function(e){
   e.preventDefault(); dz.classList.remove('dragover');
-  if(e.dataTransfer.files && e.dataTransfer.files.length>0) handleFile(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
 });
 
 function handleFile(f) {
   if (!f) return;
-  uploadedFilename = f.name;
-  document.getElementById('fn').textContent = f.name;
-  var ext = f.name.split('.').pop().toLowerCase();
-  if (ext === 'xlsx' || ext === 'xls') {
-    // Send to server for parsing
-    var reader = new FileReader();
-    reader.onload = async function(e) {
-      var b64 = btoa(String.fromCharCode.apply(null, new Uint8Array(e.target.result)));
-      try {
-        var resp = await fetch('/api/parse_excel', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({b64: b64, filename: f.name})
-        });
-        var d = await resp.json();
-        if (!d.success) throw new Error(d.error);
-        csv = d.csv;
-        allCols = d.columns;
-        showPreviewFromServer(d);
-        parseCols();
-        document.getElementById('wizardBox').style.display = 'block';
-        document.getElementById('fn').textContent = 'Loaded: ' + f.name + ' (' + d.rows + ' rows)';
-      } catch(err) {
-        document.getElementById('fn').textContent = 'Error: ' + err.message;
+  document.getElementById('fn').textContent = '\u2705 ' + f.name;
+
+  // Use PapaParse for robust CSV parsing (handles BOM, quotes, auto-detects separator)
+  Papa.parse(f, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    complete: function(result) {
+      if (!result.data || result.data.length === 0) {
+        document.getElementById('fn').textContent = '\u274c Could not parse file. Check format.';
+        return;
       }
-    };
-    reader.readAsArrayBuffer(f);
-  } else {
-    Papa.parse(f, {
-      header:true, skipEmptyLines:true, dynamicTyping:false,
-      complete: function(result) {
-        if (!result.data || result.data.length===0) {
-          document.getElementById('fn').textContent = 'Could not parse file. Check format.';
-          return;
-        }
-        csv = Papa.unparse(result.data);
-        allCols = result.meta.fields || [];
-        showPreview(result);
-        parseCols();
-        document.getElementById('wizardBox').style.display = 'block';
-        document.getElementById('fn').textContent = 'Loaded: ' + f.name + ' (' + result.data.length + ' rows)';
-      },
-      error: function(err){ document.getElementById('fn').textContent = 'Parse error: ' + err.message; }
-    });
-  }
+      parsedData = result;
+      // Rebuild raw CSV string from PapaParse output (always comma-separated, clean)
+      csv = Papa.unparse(result.data);
+      allCols = result.meta.fields || [];
+      showPreview(result);
+      parseCols();
+      setTimeout(runDataQualityCheck, 100);
+    },
+    error: function(err) {
+      document.getElementById('fn').textContent = '\u274c Parse error: ' + err.message;
+    }
+  });
 }
 
 function showPreview(result) {
-  var cols = result.meta.fields || [];
-  var rows = result.data.slice(0,4);
-  renderPreviewTable(cols, rows, result.data.length, cols.length);
-}
-function showPreviewFromServer(d) {
-  var cols = d.columns;
-  var rows = d.preview;
-  renderPreviewTable(cols, rows, d.rows, cols.length);
-}
-function renderPreviewTable(cols, rows, totalRows, totalCols) {
-  var box  = document.getElementById('previewBox');
-  var wrap = document.getElementById('previewTable');
-  var meta = document.getElementById('previewMeta');
-  var html = '<table class="preview-table"><thead><tr>';
-  cols.forEach(function(c){ html += '<th>'+escHtml(c)+'</th>'; });
+  var box   = document.getElementById('previewBox');
+  var wrap  = document.getElementById('previewTable');
+  var meta  = document.getElementById('previewMeta');
+  var cols  = result.meta.fields || [];
+  var rows  = result.data.slice(0, 4);  // show first 4 rows
+
+  var html  = '<table class="preview-table"><thead><tr>';
+  cols.forEach(function(c){ html += '<th>' + escHtml(c) + '</th>'; });
   html += '</tr></thead><tbody>';
   rows.forEach(function(r){
     html += '<tr>';
-    cols.forEach(function(c){ html += '<td>'+escHtml(String(r[c]!==undefined?r[c]:''))+'</td>'; });
+    cols.forEach(function(c){ html += '<td>' + escHtml(String(r[c] !== undefined ? r[c] : '')) + '</td>'; });
     html += '</tr>';
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  meta.textContent = totalRows + ' rows · ' + totalCols + ' columns detected';
+  meta.textContent = result.data.length + ' rows \u00B7 ' + cols.length + ' columns detected' +
+    (result.meta.delimiter !== ',' ? '  \u26a0\ufe0f Separator detected: "' + result.meta.delimiter + '" (auto-fixed)' : '');
   box.style.display = 'block';
 }
-function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 function parseCols() {
-  var yHints = ['y','target','output','result','price','revenue','cost','score','value','profit','sales'];
+  var yHints = ['y','Y','target','output','result','out','label','response','dep'];
   var guessedY = allCols.length - 1;
-  for(var i=0;i<allCols.length;i++){
-    if(yHints.indexOf(allCols[i].toLowerCase())!==-1){guessedY=i;break;}
+  for (var i = 0; i < allCols.length; i++) {
+    if (yHints.indexOf(allCols[i]) !== -1) { guessedY = i; break; }
   }
   var yE = document.getElementById('yCol');
   yE.innerHTML = '';
-  allCols.forEach(function(col,i){
+  allCols.forEach(function(col, i) {
     var opt = document.createElement('option');
-    opt.value=col; opt.textContent=col;
-    if(i===guessedY) opt.selected=true;
+    opt.value = col; opt.textContent = col;
+    if (i === guessedY) opt.selected = true;
     yE.appendChild(opt);
   });
   syncXcols();
-  document.getElementById('colSel').style.display='block';
+  document.getElementById('colSel').style.display = 'block';
 }
-function syncXcols() {
-  var yc = document.getElementById('yCol').value;
-  var xE = document.getElementById('xCols');
-  var prev = Array.from(xE.selectedOptions).map(function(o){return o.value;});
-  xE.innerHTML='';
-  allCols.forEach(function(col){
-    if(col===yc) return;
-    var opt=document.createElement('option');
-    opt.value=col; opt.textContent=col;
-    opt.selected=(prev.length===0||prev.indexOf(col)!==-1);
+
+function syncXcols() { setTimeout(runDataQualityCheck, 50);
+  var yc  = document.getElementById('yCol').value;
+  var xE  = document.getElementById('xCols');
+  var prevSelected = Array.from(xE.selectedOptions).map(function(o){ return o.value; });
+  xE.innerHTML = '';
+  allCols.forEach(function(col) {
+    if (col === yc) return;
+    var opt = document.createElement('option');
+    opt.value = col; opt.textContent = col;
+    opt.selected = (prevSelected.length === 0 || prevSelected.indexOf(col) !== -1);
     xE.appendChild(opt);
   });
-}
-function selectSector(el,val){
-  document.querySelectorAll('#sectorGrid .sector-btn').forEach(function(b){b.classList.remove('active');});
-  el.classList.add('active'); selectedSector=val;
+  hideValMsg();
+  updatePreviewLabel();
 }
 
+function updatePreviewLabel() { setTimeout(runDataQualityCheck, 50);
+  var yc  = document.getElementById('yCol').value;
+  var xc  = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
+  var el  = document.getElementById('selPreview');
+  if (!yc || xc.length === 0) {
+    el.textContent = 'Select Y and X columns above to preview your setup.';
+    return;
+  }
+  el.textContent = 'Ready: predicting  Y = ' + yc + '  from  X = [' + xc.join(', ') + ']';
+}
+
+// ── Run ──
 async function run() {
-  if (!csv) { showVal('Upload a file first.'); return; }
+  hideValMsg();
+  if (!csv) { showValMsg('Please upload a CSV file first!'); return; }
   var yc = document.getElementById('yCol').value;
-  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){return o.value;});
-  if(xc.length===0){showVal('Select at least one driver (X).'); return;}
-  hideVal();
-  document.getElementById('spin').style.display='block';
-  document.getElementById('res').style.display='none';
-  document.getElementById('err').style.display='none';
-  document.getElementById('runBtn').disabled=true;
+  var xc = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
+  if (xc.length === 0) { showValMsg('Select at least one X variable.'); return; }
+
+  document.getElementById('spin').style.display  = 'block';
+  document.getElementById('res').style.display   = 'none';
+  document.getElementById('err').style.display   = 'none';
+  document.getElementById('runBtn').disabled      = true;
+  formulaExpanded = false;
+
+  var m = document.getElementById('method').value;
   try {
-    var resp = await fetch('/api/analyze',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({csv:csv,y_col:yc,x_cols:xc,
-        sector:selectedSector,
-        user_question:document.getElementById('userQuestion').value})
+    var resp = await fetch('/api/find', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv:csv, y_col:yc, x_cols:xc, method:m})
     });
     var d = await resp.json();
-    if(!d.success) throw new Error(d.error);
-    lastResults=d; lastResults._yc=yc; lastResults._xc=xc;
-    showResults(d,yc,xc);
-  } catch(e){
-    document.getElementById('err').style.display='block';
-    document.getElementById('err').textContent='Error: '+e.message;
+    if (!d.success) throw new Error(d.error);
+    lastResults = d;
+    lastResults._y_col = yc;
+    lastResults._x_cols = xc;
+    showResults(d);
+  } catch(e) {
+    document.getElementById('err').style.display = 'block';
+    document.getElementById('err').textContent   = '\u274c ' + e.message;
   } finally {
-    document.getElementById('spin').style.display='none';
-    document.getElementById('runBtn').disabled=false;
+    document.getElementById('spin').style.display = 'none';
+    document.getElementById('runBtn').disabled    = false;
   }
 }
 
-function showResults(d,yc,xc){
-  document.getElementById('res').style.display='block';
-  var best = d.best_correlation;
-  var conf = best.confidence||0;
-  var strength = conf>80?'Strong':conf>50?'Moderate':'Weak';
-  var pillCls = conf>80?'pill-strong':conf>50?'pill-moderate':'pill-weak';
+function showResults(d) {
+  document.getElementById('res').style.display = 'block';
 
-  document.getElementById('corrType').innerHTML =
-    best.type + ' correlation' +
-    '<span class="pill '+pillCls+'">'+strength+'</span>';
-  document.getElementById('corrFormula').textContent = best.formula;
-  document.getElementById('confBar').style.width = conf+'%';
-  document.getElementById('confLabel').textContent =
-    'Confidence (R²): '+conf+'% — between '+xc[0]+' and '+yc;
+  var formula = d.adam_formula || ((d.quick_results && d.quick_results[0]) || {}).formula || 'n/a';
+  var bf  = document.getElementById('bf');
+  var btn = document.getElementById('expandBtn');
+  bf.textContent = formula;
+  bf.classList.remove('expanded');
+  btn.style.display = formula.length > 120 ? 'inline-block' : 'none';
+  if (formula.length > 120) btn.textContent = '\u25bc Show full formula';
 
+  var acc = d.adam_r2
+    ? (d.adam_r2 * 100).toFixed(4) + '%'
+    : ((d.quick_results && d.quick_results[0]) || {}).accuracy || 'n/a';
+  document.getElementById('br').textContent = 'Accuracy (R\u00B2): ' + acc;
+
+  // Chart
   var cw = document.getElementById('chartWrap');
-  cw.innerHTML = d.chart_b64
-    ? '<img src="data:image/png;base64,'+d.chart_b64+'" alt="chart">'
-    : '<p style="color:var(--light);font-size:.83rem;padding:20px 0">Chart not available.</p>';
-
-  document.getElementById('insightText').textContent = d.insight||'No insight available.';
-
-  if(d.heatmap_b64 && xc.length>1){
-    document.getElementById('heatmapBox').style.display='block';
-    document.getElementById('heatmapImg').src='data:image/png;base64,'+d.heatmap_b64;
+  cw.innerHTML = '';
+  if (d.chart_b64 && d.chart_b64.length > 200) {
+    var img = document.createElement('img');
+    img.src   = 'data:image/png;base64,' + d.chart_b64;
+    img.alt   = 'Dashboard chart';
+    img.onerror = function(){ cw.innerHTML = '<div class="chart-err">\u26a0 Chart not available.</div>'; };
+    cw.appendChild(img);
   } else {
-    document.getElementById('heatmapBox').style.display='none';
+    cw.innerHTML = '<div class="chart-err">\u26a0 Chart not available.</div>';
   }
 
-  if(d.top_correlations && d.top_correlations.length>0){
-    document.getElementById('topCorrBox').style.display='block';
-    var html=''; var mx=Math.abs(d.top_correlations[0].value)||1;
-    d.top_correlations.forEach(function(c){
-      var pct=Math.min(100,Math.abs(c.value)/mx*100).toFixed(1);
-      var pos=c.value>=0;
-      var sign=pos?'+':'';
-      html+='<div class="corr-row">'+
-        '<span class="corr-pair">'+escHtml(c.pair)+'</span>'+
-        '<div class="corr-bar-wrap"><div class="'+(pos?'corr-bar-pos':'corr-bar-neg')+'" style="width:'+pct+'%"></div></div>'+
-        '<span class="corr-val '+(pos?'pos':'neg')+'">'+sign+c.value.toFixed(3)+'</span>'+
+  // Top terms
+  var tl  = document.getElementById('tl');
+  tl.innerHTML = '';
+  var wts = (d.top_terms || []).map(function(t){ return Math.abs(t.weight); });
+  var mx  = wts.length ? Math.max.apply(null, wts) : 1;
+  if (!wts.length) {
+    tl.innerHTML = '<p style="color:var(--silver);font-size:.82rem">No significant terms found.</p>';
+  }
+  (d.top_terms || []).forEach(function(t) {
+    var pct = Math.min(100, Math.abs(t.weight) / mx * 100).toFixed(1);
+    tl.innerHTML +=
+      '<div class="term-row">' +
+      '<span class="term-name">' + t.term + '</span>' +
+      '<div class="term-bar-wrap"><div class="term-bar" style="width:' + pct + '%"></div></div>' +
+      '<span class="term-w">' + (t.weight > 0 ? '+' : '') + t.weight.toFixed(4) + '</span>' +
+      '</div>';
+  });
+
+  // Cards
+  var cg = document.getElementById('cg');
+  cg.innerHTML = '';
+  if (!(d.quick_results || []).length) {
+    cg.innerHTML = '<p style="color:var(--silver);font-size:.85rem">No Quick Search results.</p>';
+  }
+  // Build predict inputs
+  buildPredictInputs(lastResults._x_cols || [], d.quick_results || []);
+
+  (d.quick_results || []).forEach(function(r, i) {
+    var cls      = r.quality === 'PERFECT' ? 'qp' : r.quality === 'GREAT' ? 'qg' : 'qb';
+    var badgeCls = r.quality === 'PERFECT' ? 'badge-p' : r.quality === 'GREAT' ? 'badge-g' : 'badge-b';
+    cg.innerHTML +=
+      '<div class="card">' +
+      '<div class="card-rank"><span class="badge ' + badgeCls + '">' + r.quality + '</span>#' + (i+1) + '</div>' +
+      '<div class="card-formula">' + r.formula + '</div>' +
+      '<div class="card-r2 ' + cls + '">R\u00B2 = ' + r.r2.toFixed(6) + ' &nbsp;&mdash;&nbsp; ' + r.accuracy + '</div>' +
+      '</div>';
+  });
+}
+
+// ── Copy formula ──
+function copyFormula() {
+  var formula = document.getElementById('bf').textContent;
+  if (!formula || formula === 'n/a') return;
+  navigator.clipboard.writeText(formula).then(function() {
+    var btn = document.getElementById('copyBtn');
+    btn.textContent = '\u2705 Copied!';
+    setTimeout(function(){ btn.textContent = '\u{1F4CB} Copy formula'; }, 1800);
+  }).catch(function() {
+    // fallback
+    var ta = document.createElement('textarea');
+    ta.value = formula; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
+// ── Export results as CSV ──
+function exportCSV() {
+  if (!lastResults) return;
+  var rows = [['rank','quality','formula','r2','accuracy']];
+  (lastResults.quick_results || []).forEach(function(r, i){
+    rows.push([i+1, r.quality, '"'+r.formula+'"', r.r2, r.accuracy]);
+  });
+  if (lastResults.adam_formula) {
+    rows.push(['ADAM','—','"'+lastResults.adam_formula+'"', lastResults.adam_r2 || '', '']);
+  }
+  var csv_out = rows.map(function(r){ return r.join(','); }).join('\n');
+  var blob = new Blob([csv_out], {type:'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'formula_finder_results.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
+// ══════════════════════════════════════════════
+//  DATA QUALITY GATE
+// ══════════════════════════════════════════════
+var MIN_ROWS_PER_X = 10; // righe minime per variabile X
+
+function runDataQualityCheck() {
+  var blocker = document.getElementById('dqBlocker');
+  var warning = document.getElementById('dqWarning');
+  var panel   = document.getElementById('dqPanel');
+  var runBtn  = document.getElementById('runBtn');
+
+  blocker.style.display = 'none';
+  warning.style.display = 'none';
+  panel.style.display   = 'none';
+  runBtn.disabled       = false;
+
+  if (!parsedData || !parsedData.data) return;
+
+  var yc   = document.getElementById('yCol').value;
+  var xc   = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
+  var rows = parsedData.data;
+  var n    = rows.length;
+  var cols = parsedData.meta.fields || [];
+
+  var checks = [];
+  var score  = 0;
+  var total  = 0;
+  var blockers = [];
+  var warnings = [];
+
+  // CHECK 1 — Volume
+  total++;
+  var minRows = Math.max(10, MIN_ROWS_PER_X * xc.length);
+  if (n >= minRows) {
+    checks.push({icon:'✓', cls:'dq-ok', label:'Data volume', value: n + ' rows — sufficient for ' + xc.length + ' variable(s)'});
+    score++;
+  } else if (n >= Math.floor(minRows * 0.6)) {
+    checks.push({icon:'⚠', cls:'dq-warn', label:'Data volume', value: n + ' rows — recommended minimum is ' + minRows + ' for ' + xc.length + ' variable(s)'});
+    warnings.push('Your dataset has ' + n + ' rows. For ' + xc.length + ' input variable(s) we recommend at least ' + minRows + ' rows for reliable results. You can still run the analysis, but treat the output with caution.');
+    score += 0.5;
+  } else {
+    checks.push({icon:'✗', cls:'dq-err', label:'Data volume', value: n + ' rows — too few. Add at least ' + (minRows - n) + ' more rows'});
+    blockers.push('Not enough data: ' + n + ' rows found, minimum required is ' + minRows + ' for ' + xc.length + ' input variable(s). Please add more rows and try again.');
+  }
+
+  // CHECK 2 — Y variance
+  total++;
+  var yVals = rows.map(function(r){ return parseFloat(r[yc]); }).filter(function(v){ return !isNaN(v); });
+  var yMean = yVals.reduce(function(a,b){return a+b;},0) / yVals.length;
+  var yStd  = Math.sqrt(yVals.reduce(function(a,v){return a+(v-yMean)*(v-yMean);},0) / yVals.length);
+  if (yStd > 1e-6) {
+    checks.push({icon:'✓', cls:'dq-ok', label:'Target Y varies', value: 'Range: ' + Math.min.apply(null,yVals).toFixed(3) + ' → ' + Math.max.apply(null,yVals).toFixed(3)});
+    score++;
+  } else {
+    checks.push({icon:'✗', cls:'dq-err', label:'Target Y varies', value: '"' + yc + '" has the same value in every row — nothing to predict'});
+    blockers.push('Column "' + yc + '" has the same value in every row. A target variable must change across rows — otherwise there is nothing to predict.');
+  }
+
+  // CHECK 3 — X variance (ogni X deve variare)
+  total++;
+  var constCols = [];
+  xc.forEach(function(col) {
+    var vals = rows.map(function(r){ return parseFloat(r[col]); }).filter(function(v){ return !isNaN(v); });
+    var mean = vals.reduce(function(a,b){return a+b;},0)/vals.length;
+    var std  = Math.sqrt(vals.reduce(function(a,v){return a+(v-mean)*(v-mean);},0)/vals.length);
+    if (std < 1e-9) constCols.push(col);
+  });
+  if (constCols.length === 0) {
+    checks.push({icon:'✓', cls:'dq-ok', label:'Input variables', value: 'All ' + xc.length + ' variable(s) have sufficient variation'});
+    score++;
+  } else {
+    checks.push({icon:'✗', cls:'dq-err', label:'Input variables', value: 'Constant column(s): ' + constCols.join(', ') + ' — remove or replace them'});
+    blockers.push('Column(s) ' + constCols.join(', ') + ' have the same value in every row and cannot be used as input variables. Remove them from the X selection.');
+  }
+
+  // CHECK 4 — Valori mancanti / non numerici
+  total++;
+  var badCols = [];
+  xc.concat([yc]).forEach(function(col) {
+    var bad = rows.filter(function(r){ return r[col] === undefined || r[col] === '' || isNaN(parseFloat(r[col])); }).length;
+    if (bad > 0) badCols.push(col + ' (' + bad + ' missing)');
+  });
+  if (badCols.length === 0) {
+    checks.push({icon:'✓', cls:'dq-ok', label:'Missing values', value: 'No missing or non-numeric values detected'});
+    score++;
+  } else {
+    checks.push({icon:'⚠', cls:'dq-warn', label:'Missing values', value: badCols.join(', ')});
+    warnings.push('Some cells contain missing or non-numeric values: ' + badCols.join('; ') + '. These rows will be skipped automatically, which may reduce accuracy.');
+    score += 0.5;
+  }
+
+  // CHECK 5 — Numero ragionevole di X
+  total++;
+  if (xc.length === 0) {
+    checks.push({icon:'✗', cls:'dq-err', label:'Variables selected', value: 'No input variable selected — select at least one X'});
+    blockers.push('Please select at least one input variable (X) before running the analysis.');
+  } else if (xc.length > 5) {
+    checks.push({icon:'⚠', cls:'dq-warn', label:'Variables selected', value: xc.length + ' variables — many inputs may reduce interpretability'});
+    warnings.push('You selected ' + xc.length + ' input variables. With many variables the formula becomes harder to interpret and requires significantly more data. Consider starting with the 2-3 most relevant ones.');
+    score += 0.5; total++;
+  } else {
+    checks.push({icon:'✓', cls:'dq-ok', label:'Variables selected', value: xc.length + ' input variable(s) — good'});
+    score++;
+  }
+
+  // ── Render checks ──
+  var html = '';
+  checks.forEach(function(c) {
+    html += '<div class="dq-row"><span class="dq-icon ' + c.cls + '">' + c.icon + '</span><span class="dq-label">' + c.label + '</span><span class="dq-value ' + c.cls + '">' + c.value + '</span></div>';
+  });
+  document.getElementById('dqRows').innerHTML = html;
+
+  // ── Score bar ──
+  var pct   = Math.round(score / total * 100);
+  var fill  = document.getElementById('dqFill');
+  var label = document.getElementById('dqScoreLabel');
+  fill.style.width = pct + '%';
+  fill.style.background = pct >= 80 ? '#06D6A0' : pct >= 50 ? '#FCD34D' : '#EF4444';
+  label.textContent = 'Quality score: ' + pct + ' / 100';
+  panel.style.display = 'block';
+
+  // ── Blockers ──
+  if (blockers.length > 0) {
+    blocker.innerHTML = '&#9888;&nbsp;<strong>Cannot run analysis</strong><br>' + blockers.join('<br>');
+    blocker.style.display = 'block';
+    runBtn.disabled = true;
+  }
+
+  // ── Warnings ──
+  if (warnings.length > 0 && blockers.length === 0) {
+    warning.innerHTML = '&#9888;&nbsp;<strong>Heads up</strong><br>' + warnings.join('<br>');
+    warning.style.display = 'block';
+  }
+}
+
+// ── Helpers ──
+// ── Build predict input fields after results ──
+function buildPredictInputs(xCols, quick_results) {
+  var grid = document.getElementById('predictInputs');
+  grid.innerHTML = '';
+  xCols.forEach(function(col) {
+    grid.innerHTML +=
+      '<div class="input-row">' +
+      '<label>' + col + '</label>' +
+      '<input type="number" step="any" id="pi_' + col + '" placeholder="enter value">' +
+      '</div>';
+  });
+  document.getElementById('actionPanels').classList.add('visible');
+}
+
+// ── Run prediction ──
+async function runPredict() {
+  var yc  = lastResults._y_col;
+  var xc  = lastResults._x_cols;
+  var inputs = {};
+  var ok = true;
+  xc.forEach(function(col) {
+    var v = document.getElementById('pi_' + col).value;
+    if (v === '' || isNaN(parseFloat(v))) { ok = false; }
+    else inputs[col] = parseFloat(v);
+  });
+  if (!ok) { alert('Please enter all input values.'); return; }
+
+  document.getElementById('predictBtn').disabled = true;
+  document.getElementById('predictBtn').textContent = 'Calculating...';
+  try {
+    var resp = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, inputs: inputs})
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+
+    // Show prediction
+    var res = document.getElementById('predictResult');
+    res.style.display = 'block';
+    res.textContent = d.prediction.toLocaleString(undefined, {maximumFractionDigits: 4});
+    document.getElementById('predictLabel').textContent = 'Predicted value of ' + yc;
+
+    // Show sensitivity bars
+    var sens = d.sensitivity;
+    var maxAbs = Math.max.apply(null, Object.values(sens).map(Math.abs)) || 1;
+    var html = '';
+    Object.keys(sens).sort(function(a,b){ return Math.abs(sens[b]) - Math.abs(sens[a]); })
+    .forEach(function(k) {
+      var v   = sens[k];
+      var pct = Math.min(100, Math.abs(v) / maxAbs * 100).toFixed(1);
+      var cls = v >= 0 ? 'pos' : 'neg';
+      var sign = v >= 0 ? '+' : '';
+      html += '<div class="sens-row">' +
+        '<span class="sens-name">' + k + '</span>' +
+        '<div class="sens-bar-wrap"><div class="sens-bar ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<span class="sens-val">' + sign + v.toFixed(3) + '</span>' +
         '</div>';
     });
-    document.getElementById('topCorrList').innerHTML=html;
-  } else {
-    document.getElementById('topCorrBox').style.display='none';
+    document.getElementById('sensResult').innerHTML = html;
+
+  } catch(e) { alert('Prediction error: ' + e.message); }
+  finally {
+    document.getElementById('predictBtn').disabled = false;
+    document.getElementById('predictBtn').textContent = 'Calculate';
   }
 }
 
-function exportResults(){
-  if(!lastResults) return;
-  var rows=[['pair','pearson_r','type','formula','confidence_pct']];
-  (lastResults.top_correlations||[]).forEach(function(c){
-    rows.push(['"'+c.pair+'"',c.value,lastResults.best_correlation.type,
-               '"'+lastResults.best_correlation.formula+'"',
-               lastResults.best_correlation.confidence]);
-  });
-  var out=rows.map(function(r){return r.join(',');}).join('\n');
-  var blob=new Blob([out],{type:'text/csv'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url; a.download='sumup_insights_results.csv';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+// ── Explain formula in plain English ──
+async function runExplain() {
+  if (!lastResults) return;
+  document.getElementById('explainBtn').disabled = true;
+  document.getElementById('explainBtn').textContent = 'Thinking...';
+  try {
+    var resp = await fetch('/api/explain', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        top_terms: lastResults.top_terms || [],
+        formula:   lastResults.adam_formula || '',
+        r2:        lastResults.adam_r2 || null,
+        y_col:     lastResults._y_col || 'Y'
+      })
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+    var box = document.getElementById('explainResult');
+    box.style.display = 'block';
+    box.textContent = d.explanation;
+  } catch(e) { alert('Explain error: ' + e.message); }
+  finally {
+    document.getElementById('explainBtn').disabled = false;
+    document.getElementById('explainBtn').textContent = 'Explain this formula';
+  }
 }
 
-function showVal(m){var e=document.getElementById('valMsg');e.textContent=m;e.style.display='block';}
-function hideVal(){document.getElementById('valMsg').style.display='none';}
+function toggleHow() {
+  var body   = document.getElementById('howBody');
+  var arrow  = document.getElementById('howArrow');
+  var open   = body.style.display === 'block';
+  body.style.display  = open ? 'none' : 'block';
+  arrow.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+function toggleFormula() {
+  var bf  = document.getElementById('bf');
+  var btn = document.getElementById('expandBtn');
+  formulaExpanded = !formulaExpanded;
+  bf.classList.toggle('expanded', formulaExpanded);
+  btn.textContent = formulaExpanded ? '\u25b2 Collapse formula' : '\u25bc Show full formula';
+}
+
+function showValMsg(msg) {
+  var el = document.getElementById('valMsg');
+  el.textContent = '\u26a0\ufe0f ' + msg;
+  el.style.display = 'block';
+}
+function hideValMsg() {
+  document.getElementById('valMsg').style.display = 'none';
+}
+
+// ── Template download panel ──
+var TEMPLATE_DATA = {
+  "bolletta_elettrica.csv": "kwh_consumati,costo_euro\n100,18\n200,36\n350,63\n500,90\n750,135\n1000,180",
+  "consumo_benzina.csv": "km_percorsi,litri_consumati,costo_euro\n100,7,11.2\n250,17.5,28.0\n400,28.0,44.8\n600,42.0,67.2\n800,56.0,89.6\n1000,70.0,112.0",
+  "spesa_supermercato.csv": "num_persone,pasti_settimana,spesa_euro\n1,14,80\n2,14,140\n3,14,190\n4,14,240\n5,14,290\n6,14,340",
+  "rata_mutuo.csv": "importo_euro,anni,rata_mensile_euro\n80000,15,560\n100000,20,550\n150000,20,825\n200000,25,900\n250000,30,1050\n300000,30,1260",
+  "risparmio_mensile.csv": "stipendio_netto,spese_fisse,spese_variabili,risparmio\n1200,600,300,300\n1500,700,350,450\n1800,800,400,600\n2000,900,500,600\n2500,1000,600,900\n3000,1200,700,1100",
+  "stipendio_esperienza.csv": "anni_esperienza,stipendio_euro\n0,1200\n2,1350\n5,1600\n8,1900\n12,2300\n15,2700\n20,3200",
+  "bmi.csv": "peso_kg,altezza_m,bmi\n50,1.60,19.5\n60,1.65,22.0\n70,1.75,22.9\n80,1.70,27.7\n90,1.80,27.8\n100,1.70,34.6\n110,1.75,35.9",
+  "calorie_camminata.csv": "peso_kg,km_percorsi,calorie_bruciate\n60,3,150\n75,3,187\n60,5,250\n70,5,280\n80,7,420\n70,10,560\n90,10,630",
+  "media_voti.csv": "num_materie,somma_voti,media\n5,38,7.6\n6,48,8.0\n8,56,7.0\n7,63,9.0\n4,32,8.0\n9,72,8.0",
+  "studio_vs_voto.csv": "ore_studio_settimana,voto_esame\n2,5.0\n5,6.5\n8,7.5\n12,8.5\n15,9.0\n18,9.5\n20,10.0",
+  "consumo_acqua.csv": "persone_casa,giorni,litri_consumati\n1,30,1500\n2,30,2800\n3,30,4000\n4,30,5100\n5,30,6200\n6,30,7200",
+  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n5,8,2.5\n2,10,3.8\n0,12,5.0\n-3,14,7.2\n-5,16,9.5\n-8,18,12.0"
+};
+
+function updateTplDesc() {
+  var sel = document.getElementById('tplSelect');
+  var opt = sel.options[sel.selectedIndex];
+  var desc = document.getElementById('tplDesc');
+  if (sel.value && opt.dataset.desc) {
+    desc.textContent = 'ℹ️ ' + opt.dataset.desc;
+    desc.style.display = 'block';
+  } else {
+    desc.style.display = 'none';
+  }
+}
+
+function downloadTemplate() {
+  var sel = document.getElementById('tplSelect');
+  var fname = sel.value;
+  if (!fname) { alert('Seleziona prima un template!'); return; }
+  var data = TEMPLATE_DATA[fname];
+  if (!data) { alert('Template non trovato.'); return; }
+  var blob = new Blob([data], {type: 'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>"""
 
 
-# ─────────────────────── FLASK ───────────────────────
+def _plain_english(top3, y_col):
+    if not top3: return "No clear pattern found."
+    parts = []
+    for t in top3:
+        dirn = "higher" if t["weight"] > 0 else "lower"
+        parts.append("%s tends to make %s %s" % (t["term"], y_col, dirn))
+    return "; ".join(parts) + "."
+
 
 def create_app():
     from flask import Flask, request, jsonify, Response
@@ -870,87 +1100,103 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'version': '6.0-sumup'})
+        return jsonify({'status': 'ok', 'version': '4.0'})
 
-    @app.route('/api/parse_excel', methods=['POST'])
-    def api_parse_excel():
+    @app.route('/api/find', methods=['POST'])
+    def api_find():
         try:
-            body = request.get_json()
-            import base64 as b64m
-            file_bytes = b64m.b64decode(body['b64'])
-            filename   = body.get('filename','file.xlsx')
-            df = pd.read_excel(io.BytesIO(file_bytes))
-            df = df.select_dtypes(include=[np.number, 'object'])
-            csv_out = df.to_csv(index=False)
-            preview = df.head(4).fillna('').to_dict('records')
-            return jsonify({
-                'success': True,
-                'csv': csv_out,
-                'columns': list(df.columns),
-                'rows': len(df),
-                'preview': preview
-            })
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            method = body.get('method', 'both')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula(thr=0.05)
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(8)
+                result['chart_b64']    = make_chart_b64(X_dict, y_data, model)
+            else:
+                result['chart_b64'] = make_chart_b64(X_dict, y_data)
+            return jsonify(result)
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 400
 
-    @app.route('/api/analyze', methods=['POST'])
-    def api_analyze():
+    @app.route('/api/json', methods=['POST'])
+    def api_json():
         try:
-            body     = request.get_json()
-            df       = pd.read_csv(io.StringIO(body['csv']))
-            y_col    = body['y_col']
-            x_cols   = body['x_cols']
-            sector   = body.get('sector','')
-            user_q   = body.get('user_question','')
+            body   = request.get_json()
+            X_dict = {k: np.array(v, float) for k, v in body['X'].items()}
+            y_data = np.array(body['y'], float)
+            method = body.get('method', 'quick')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1000, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula()
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(5)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
-            primary_x = x_cols[0]
-            x_data = df[primary_x].astype(float).values
-            y_data = df[y_col].astype(float).values
 
-            rel      = detect_relationship_type(x_data, y_data)
-            chart    = make_chart_b64(df, primary_x, y_col, rel)
+    @app.route('/api/predict', methods=['POST'])
+    def api_predict():
+        """Given a fitted formula (adam weights) and input values, return prediction."""
+        try:
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            model  = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+            # predict single point
+            inp    = {k: np.array([float(v)]) for k, v in body['inputs'].items()}
+            pred   = float(model.predict(inp)[0])
+            # sensitivity: partial derivative via finite diff
+            sens = {}
+            for k in body['x_cols']:
+                base = {kk: np.array([float(body['inputs'][kk])]) for kk in body['x_cols']}
+                delta = abs(float(body['inputs'][k])) * 0.01 + 1e-6
+                base_up = dict(base); base_up[k] = np.array([float(body['inputs'][k]) + delta])
+                sens[k] = round(float((model.predict(base_up)[0] - model.predict(base)[0]) / delta), 4)
+            return jsonify({'success': True, 'prediction': round(pred, 4), 'sensitivity': sens})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
-            heatmap = ""
-            if len(x_cols) > 1:
-                cols_h = list(set(x_cols + [y_col]))
-                heatmap = make_heatmap_b64(df[cols_h])
-
-            top_corr = []
-            for xc in x_cols:
-                try:
-                    v = float(df[[xc, y_col]].corr().iloc[0,1])
-                    if not np.isnan(v):
-                        top_corr.append({"pair": f"{xc} → {y_col}", "value": round(v,4)})
-                except: pass
-            for i in range(len(x_cols)):
-                for j in range(i+1, len(x_cols)):
-                    try:
-                        v = float(df[[x_cols[i],x_cols[j]]].corr().iloc[0,1])
-                        if not np.isnan(v):
-                            top_corr.append({"pair": f"{x_cols[i]} ↔ {x_cols[j]}", "value": round(v,4)})
-                    except: pass
-            top_corr.sort(key=lambda d: abs(d["value"]), reverse=True)
-            top_corr = top_corr[:12]
-
-            insight = call_claude_insight(
-                primary_x, y_col, rel, rel.get("r2",0),
-                sector, user_q, len(df)
+    @app.route('/api/explain', methods=['POST'])
+    def api_explain():
+        """Natural language explanation of the top terms."""
+        try:
+            body      = request.get_json()
+            terms     = body.get('top_terms', [])
+            formula   = body.get('formula', '')
+            r2        = body.get('r2', None)
+            y_col     = body.get('y_col', 'Y')
+            if not terms:
+                return jsonify({'success': True, 'explanation': 'No significant terms found.'})
+            # Sort by abs weight
+            terms_s = sorted(terms, key=lambda t: abs(t['weight']), reverse=True)
+            total   = sum(abs(t['weight']) for t in terms_s) or 1
+            lines   = []
+            for i, t in enumerate(terms_s[:5]):
+                pct  = round(abs(t['weight']) / total * 100, 1)
+                dirn = 'increases' if t['weight'] > 0 else 'decreases'
+                lines.append("  %d. %s — %s %s by %.4f per unit (%.1f%% of total influence)" % (
+                    i+1, t['term'], t['term'], dirn, abs(t['weight']), pct))
+            r2_str = ("The model explains %.2f%% of the variance in %s." % (r2*100, y_col)) if r2 else ''
+            explanation = (
+                "Formula summary for %s:\n\n" % y_col +
+                r2_str + ("\n\n" if r2_str else "") +
+                "Key drivers (by importance):\n" +
+                "\n".join(lines) +
+                "\n\nIn plain English: " + _plain_english(terms_s[:3], y_col)
             )
-
-            return jsonify({
-                'success': True,
-                'best_correlation': {
-                    'type':       rel.get('type','Unknown'),
-                    'formula':    rel.get('formula','n/a'),
-                    'confidence': rel.get('confidence',0),
-                    'r2':         rel.get('r2',0)
-                },
-                'chart_b64':       chart,
-                'heatmap_b64':     heatmap,
-                'top_correlations': top_corr,
-                'insight':         insight
-            })
-
+            return jsonify({'success': True, 'explanation': explanation})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -965,4 +1211,6 @@ if __name__ == '__main__':
     p.add_argument('--port', type=int, default=5000)
     p.add_argument('--host', default='0.0.0.0')
     args = p.parse_args()
-    app.run(host=args.host, port=args.port, debug=False)
+    app = create_app()
+    if app:
+        app.run(host=args.host, port=args.port, debug=False)
