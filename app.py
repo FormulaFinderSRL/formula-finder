@@ -142,8 +142,86 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Formula Finder</title>
-<!-- PapaParse: robust CSV parsing (handles quotes, BOM, semicolons) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- Inline CSV Parser (no CDN dependency) -->
+<script>
+
+/* ── Inline CSV Parser (replaces PapaParse CDN dependency) ── */
+var Papa = (function(){
+  function detectSep(text){
+    var first = text.split(/\r?\n/,2)[0];
+    var sc = (first.match(/;/g)||[]).length;
+    var cc = (first.match(/,/g)||[]).length;
+    var tc = (first.match(/\t/g)||[]).length;
+    if(tc>=sc && tc>=cc && tc>0) return '\t';
+    if(sc>cc) return ';';
+    return ',';
+  }
+  function splitRow(line,sep){
+    var cols=[]; var cur=''; var inQ=false;
+    for(var i=0;i<line.length;i++){
+      var ch=line[i];
+      if(inQ){
+        if(ch==='"'){ if(i+1<line.length&&line[i+1]==='"'){cur+='"';i++;}else{inQ=false;} }
+        else{cur+=ch;}
+      } else {
+        if(ch==='"'){inQ=true;}
+        else if(ch===sep){cols.push(cur);cur='';}
+        else{cur+=ch;}
+      }
+    }
+    cols.push(cur);
+    return cols;
+  }
+  function parseFile(file, opts){
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var text = ev.target.result.replace(/^\xEF\xBB\xBF/,'');
+      var sep = detectSep(text);
+      var lines = text.split(/\r?\n/);
+      // Remove empty trailing lines
+      while(lines.length>0 && lines[lines.length-1].trim()==='') lines.pop();
+      if(lines.length<2){
+        if(opts.error) opts.error({message:'File has fewer than 2 lines'});
+        return;
+      }
+      var hdr = splitRow(lines[0],sep).map(function(h){return h.trim();});
+      var data=[];
+      for(var i=1;i<lines.length;i++){
+        if(opts.skipEmptyLines && lines[i].trim()==='') continue;
+        var vals=splitRow(lines[i],sep);
+        var obj={};
+        for(var j=0;j<hdr.length;j++){
+          obj[hdr[j]] = j<vals.length ? vals[j].trim() : '';
+        }
+        data.push(obj);
+      }
+      var result = {data:data, meta:{fields:hdr, delimiter:sep}};
+      if(opts.complete) opts.complete(result);
+    };
+    reader.onerror = function(){
+      if(opts.error) opts.error({message:'FileReader error'});
+    };
+    reader.readAsText(file);
+  }
+  function unparse(data){
+    if(!data||data.length===0) return '';
+    var keys=Object.keys(data[0]);
+    var lines=[keys.join(',')];
+    data.forEach(function(row){
+      var vals=keys.map(function(k){
+        var v=String(row[k]!==undefined?row[k]:'');
+        if(v.indexOf(',')!==-1||v.indexOf('"')!==-1||v.indexOf('\n')!==-1)
+          return '"'+v.replace(/"/g,'""')+'"';
+        return v;
+      });
+      lines.push(vals.join(','));
+    });
+    return lines.join('\n');
+  }
+  return {parse:parseFile, unparse:unparse};
+})();
+
+</script>
 <style>
 :root{--bg:#0D1B2A;--mid:#112233;--card:#162840;--teal:#1B9AAA;--neon:#06D6A0;--amber:#FCD34D;--red:#EF4444;--white:#fff;--silver:#B0C4D8}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -518,7 +596,6 @@ var dz = document.getElementById('dropZone');
 
 // ── Upload via file input ──
 fi.addEventListener('change', function() {
-  console.log('[FF] file input change event fired, files:', fi.files.length);
   if (fi.files && fi.files.length > 0) handleFile(fi.files[0]);
 });
 
@@ -532,34 +609,7 @@ dz.addEventListener('drop', function(e){
 
 function handleFile(f) {
   if (!f) return;
-  console.log('[FF] handleFile called:', f.name, f.size);
   document.getElementById('fn').textContent = '\u2705 ' + f.name;
-
-  // Check if PapaParse loaded
-  if (typeof Papa === 'undefined') {
-    console.warn('[FF] PapaParse not loaded, using fallback reader');
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-      var text = ev.target.result.replace(/^\xEF\xBB\xBF/, '');
-      var sep = (text.split(';').length > text.split(',').length) ? ';' : ',';
-      var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
-      if (lines.length < 2) { document.getElementById('fn').textContent = '\u274C File is empty or has no data rows'; return; }
-      var hdr = lines[0].split(sep).map(function(h){ return h.trim().replace(/^"|"$/g,''); });
-      var rows = [];
-      for (var i = 1; i < lines.length; i++) {
-        var vals = lines[i].split(sep);
-        var obj = {};
-        for (var j = 0; j < hdr.length; j++) obj[hdr[j]] = vals[j] ? vals[j].trim().replace(/^"|"$/g,'') : '';
-        rows.push(obj);
-      }
-      csv = rows;
-      buildColumnSelectors(hdr);
-      showPreview(hdr, rows);
-      console.log('[FF] Fallback parse OK, rows:', rows.length);
-    };
-    reader.readAsText(f);
-    return;
-  }
 
   // Use PapaParse for robust CSV parsing (handles BOM, quotes, auto-detects separator)
   Papa.parse(f, {
