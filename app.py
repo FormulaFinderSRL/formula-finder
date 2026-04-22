@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import numpy as np, pandas as pd, base64, io, warnings, os
+import numpy as np, pandas as pd, base64, io, warnings
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────── MATH CORE ───────────────────────────
@@ -259,6 +259,7 @@ select:focus{outline:none;border-color:var(--teal)}
 /* ── Error ── */
 .error-box{background:#2a1018;border:1px solid var(--red);border-radius:10px;padding:14px 16px;color:var(--red);margin-bottom:16px;font-size:.88rem}
 
+
 /* ── Predict & Explain panels ── */
 .action-panels{display:none;gap:18px;margin-bottom:20px;flex-wrap:wrap}
 .action-panels.visible{display:flex}
@@ -282,7 +283,6 @@ select:focus{outline:none;border-color:var(--teal)}
 .panel-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:7px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;margin-top:4px}
 .panel-btn:hover{background:var(--neon)}
 .panel-btn:disabled{opacity:.5;cursor:not-allowed}
-
 footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;border-top:1px solid #1e3a5f;margin-top:40px}
 
 @media(max-width:600px){
@@ -293,29 +293,17 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 }
 
 /* ── Template download panel ── */
-.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:20px 24px;margin-bottom:24px}
-.tpl-panel h3{color:var(--teal);font-size:.88rem;letter-spacing:1px;margin-bottom:4px;font-weight:700}
-.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:14px}
+.tpl-panel{background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px 28px;margin-bottom:24px}
+.tpl-panel h3{color:var(--white);font-size:.82rem;letter-spacing:2px;margin-bottom:4px;font-weight:700;text-transform:uppercase}
+.tpl-panel p{color:var(--silver);font-size:.78rem;margin-bottom:16px;line-height:1.55}
 .tpl-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:9px 12px;font-size:.85rem;flex:1;min-width:200px;max-width:420px}
-.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:8px;padding:6px 10px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none}
-.tpl-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;white-space:nowrap}
-.tpl-btn:hover{background:var(--neon)}
-
-/* ── Data Quality Gate ── */
-.dq-panel{display:none;background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px 28px;margin-bottom:20px}
-.dq-title{font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--white);margin-bottom:16px}
-.dq-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1a2f4a;font-size:.8rem}
-.dq-row:last-child{border-bottom:none}
-.dq-icon{font-size:1rem;min-width:20px;text-align:center}
-.dq-label{color:var(--silver);min-width:130px;font-size:.78rem;letter-spacing:.3px}
-.dq-value{color:var(--white);flex:1;font-size:.78rem}
-.dq-ok{color:#06D6A0}.dq-warn{color:#FCD34D}.dq-err{color:#EF4444}
-.dq-score-bar{height:6px;border-radius:3px;background:#1a2f4a;margin:14px 0 4px;overflow:hidden}
-.dq-score-fill{height:100%;border-radius:3px;transition:width .6s ease}
-.dq-score-label{font-size:.72rem;color:var(--silver);text-align:right}
-.dq-blocker{display:none;background:#2a1018;border:1px solid #EF4444;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#EF4444;line-height:1.6}
-.dq-warning{display:none;background:#1e1a0a;border:1px solid #FCD34D;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#FCD34D;line-height:1.6}
+.tpl-select{background:var(--mid);color:var(--white);border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;font-size:.85rem;flex:1;min-width:220px;max-width:460px;cursor:pointer;transition:.2s;appearance:auto}
+.tpl-select:focus{outline:none;border-color:var(--teal)}
+.tpl-select optgroup{color:var(--teal);font-size:.75rem;font-weight:700;letter-spacing:.5px}
+.tpl-select option{color:var(--white);font-size:.84rem;padding:4px 0}
+.tpl-desc{font-size:.75rem;color:var(--silver);margin-top:10px;padding:8px 12px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none;line-height:1.5}
+.tpl-btn{background:transparent;color:var(--teal);border:1px solid var(--teal);padding:10px 24px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.8px;transition:.2s;white-space:nowrap;text-transform:uppercase}
+.tpl-btn:hover{background:var(--teal);color:var(--bg)}
 </style>
 </head>
 <body>
@@ -326,41 +314,46 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 <div class="container">
   <!-- ── Template Download Panel ── -->
   <div class="tpl-panel">
-    <h3>&#128204; NON HAI UN FILE? SCARICA UN ESEMPIO</h3>
-    <p>Scegli un template, scaricalo, compila con i tuoi dati reali e caricalo sopra.</p>
+    <h3>Download a sample dataset</h3>
+    <p>Choose a ready-made CSV, fill it with your own data, then upload it above. Each file is pre-formatted and immediately usable.</p>
     <div class="tpl-row">
       <select class="tpl-select" id="tplSelect" onchange="updateTplDesc()">
-        <option value="">— Scegli un esempio —</option>
-        <option value="bolletta_elettrica.csv" data-desc="Scopri il costo al kWh dalla tua bolletta elettrica">&#128161; Bolletta elettrica</option>
-        <option value="consumo_benzina.csv" data-desc="Calcola quanto spendi per ogni km percorso">&#128664; Consumo benzina</option>
-        <option value="spesa_supermercato.csv" data-desc="Stima la spesa settimanale in base al numero di persone in casa">&#128717; Spesa supermercato</option>
-        <option value="rata_mutuo.csv" data-desc="Trova la formula della rata mensile del mutuo">&#128179; Rata mutuo</option>
-        <option value="risparmio_mensile.csv" data-desc="Calcola quanto riesci a risparmiare ogni mese">&#128167; Risparmio mensile</option>
-        <option value="stipendio_esperienza.csv" data-desc="Come cresce lo stipendio con gli anni di esperienza">&#128200; Stipendio per esperienza</option>
-        <option value="bmi.csv" data-desc="Indice di massa corporea: formula peso/altezza&#178;">&#9878; BMI</option>
-        <option value="calorie_camminata.csv" data-desc="Calorie bruciate camminando in base a peso e distanza">&#128293; Calorie camminando</option>
-        <option value="media_voti.csv" data-desc="Calcola la media scolastica da voti e materie">&#128218; Media voti</option>
-        <option value="studio_vs_voto.csv" data-desc="Quanto studio serve per ottenere un buon voto?">&#9201; Studio vs Voto</option>
-        <option value="consumo_acqua.csv" data-desc="Litri d&#39;acqua consumati per numero di persone in casa">&#128167; Consumo acqua</option>
-        <option value="gas_riscaldamento.csv" data-desc="Consumo di gas in inverno in base alla temperatura esterna">&#127777; Gas riscaldamento</option>
-        <option value="" disabled>── Scienza &amp; Tecnica ──</option>
-        <option value="newton.csv" data-desc="Seconda legge di Newton: F = m x a">&#9881; Fisica — Legge di Newton (F=ma)</option>
-        <option value="energia_cinetica.csv" data-desc="Energia cinetica: E = 1/2 x m x v^2">&#9889; Fisica — Energia cinetica</option>
-        <option value="gas_ideale.csv" data-desc="Gas ideale semplificato: P x V = costante x T">&#127776; Fisica — Gas ideale (PV=nRT)</option>
-        <option value="caduta_libera.csv" data-desc="Caduta libera: h = 1/2 x g x t^2">&#127773; Fisica — Caduta libera</option>
-        <option value="interesse_composto.csv" data-desc="Interesse composto: V = C x (1 + r)^t">&#128176; Finanza — Interesse composto</option>
-        <option value="legge_ohm.csv" data-desc="Legge di Ohm: V = I x R">&#9889; Elettronica — Legge di Ohm</option>
-        <option value="potenza_elettrica.csv" data-desc="Potenza elettrica: P = V x I">&#128268; Elettronica — Potenza elettrica</option>
-        <option value="stima_immobiliare.csv" data-desc="Stima del prezzo immobiliare: regressione multivariabile">&#127968; Immobiliare — Stima prezzo</option>
-        <option value="dose_farmaco.csv" data-desc="Dose del farmaco proporzionale al peso corporeo">&#128138; Medicina — Dose farmaco</option>
-        <option value="ph_soluzione.csv" data-desc="pH di una soluzione: pH = -log[H+]">&#9878; Chimica — pH soluzione</option>
-        <option value="velocita_suono.csv" data-desc="Velocita del suono in aria al variare della temperatura">&#127926; Acustica — Velocita del suono</option>
-        <option value="crescita_batterica.csv" data-desc="Crescita batterica esponenziale: N = N0 x e^(k x t)">&#129440; Biologia — Crescita batterica</option>
+        <option value="">Select a dataset template&hellip;</option>
+        <optgroup label="Everyday Life">
+          <option value="bolletta_elettrica.csv"    data-desc="Discover the cost per kWh from your electricity bill.">Electricity Bill</option>
+          <option value="consumo_benzina.csv"       data-desc="Calculate how much you spend per kilometre driven.">Fuel Consumption</option>
+          <option value="spesa_supermercato.csv"    data-desc="Estimate weekly grocery spend based on household size.">Grocery Spending</option>
+          <option value="rata_mutuo.csv"            data-desc="Approximate monthly mortgage payment from loan amount and term.">Mortgage Payment</option>
+          <option value="risparmio_mensile.csv"     data-desc="How much you can save each month after fixed and variable costs.">Monthly Savings</option>
+          <option value="stipendio_esperienza.csv"  data-desc="How salary grows with years of professional experience.">Salary vs Experience</option>
+          <option value="bmi.csv"                   data-desc="Body Mass Index: BMI = weight / height&sup2;.">Body Mass Index (BMI)</option>
+          <option value="calorie_camminata.csv"     data-desc="Calories burned walking based on body weight and distance.">Calories — Walking</option>
+          <option value="media_voti.csv"            data-desc="Calculate grade averages from subject scores.">Grade Average</option>
+          <option value="studio_vs_voto.csv"        data-desc="How study hours per week correlate with exam results.">Study Hours vs Grade</option>
+          <option value="consumo_acqua.csv"         data-desc="Household water consumption based on number of residents.">Water Consumption</option>
+          <option value="gas_riscaldamento.csv"     data-desc="Gas consumption in winter based on outside temperature.">Heating Gas Usage</option>
+        </optgroup>
+        <optgroup label="Science &amp; Engineering">
+          <option value="newton.csv"              data-desc="Newton&rsquo;s second law: Force = mass &times; acceleration (F = ma).">Physics — Newton&rsquo;s Second Law</option>
+          <option value="energia_cinetica.csv"    data-desc="Kinetic energy: E = &frac12; &times; mass &times; velocity&sup2;.">Physics — Kinetic Energy</option>
+          <option value="gas_ideale.csv"          data-desc="Ideal gas law: P &times; V = n &times; R &times; T.">Physics — Ideal Gas Law</option>
+          <option value="caduta_libera.csv"       data-desc="Free fall: height = &frac12; &times; g &times; time&sup2;.">Physics — Free Fall</option>
+          <option value="interesse_composto.csv"  data-desc="Compound interest: V = C &times; (1 + r)^t.">Finance — Compound Interest</option>
+          <option value="legge_ohm.csv"           data-desc="Ohm&rsquo;s law: Voltage = Current &times; Resistance (V = IR).">Electronics — Ohm&rsquo;s Law</option>
+          <option value="potenza_elettrica.csv"   data-desc="Electrical power: P = Voltage &times; Current.">Electronics — Electrical Power</option>
+          <option value="stima_immobiliare.csv"   data-desc="Property price estimation using area, floor and distance from centre.">Real Estate — Price Estimate</option>
+          <option value="dose_farmaco.csv"        data-desc="Drug dosage proportional to patient body weight.">Medicine — Drug Dosage</option>
+          <option value="ph_soluzione.csv"        data-desc="pH of a solution: pH = &minus;log[H&plus;].">Chemistry — pH</option>
+          <option value="velocita_suono.csv"      data-desc="Speed of sound in air as a function of temperature.">Acoustics — Speed of Sound</option>
+          <option value="crescita_batterica.csv"  data-desc="Exponential bacterial growth: N = N&sub0; &times; e^(k&times;t).">Biology — Bacterial Growth</option>
+        </optgroup>
       </select>
       <button class="tpl-btn" onclick="downloadTemplate()">&#8681; Scarica template</button>
     </div>
     <div class="tpl-desc" id="tplDesc"></div>
   </div>
+
+
 
   <!-- ── How it works accordion ── -->
   <div class="how-box">
@@ -449,16 +442,6 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <button type="button" class="run-btn" id="runBtn" onclick="run()">&#128269; FIND FORMULA</button>
   </div>
 
-  <!-- ── Data Quality Gate ── -->
-  <div class="dq-blocker" id="dqBlocker"></div>
-  <div class="dq-warning" id="dqWarning"></div>
-  <div class="dq-panel" id="dqPanel">
-    <div class="dq-title">Data Quality Check</div>
-    <div id="dqRows"></div>
-    <div class="dq-score-bar"><div class="dq-score-fill" id="dqFill"></div></div>
-    <div class="dq-score-label" id="dqScoreLabel"></div>
-  </div>
-
   <div class="spinner" id="spin">Searching&hellip; please wait</div>
   <div class="error-box" id="err" style="display:none"></div>
 
@@ -475,7 +458,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
       </div>
     </div>
 
-    <!-- ── Action panels: Predict / Sensitivity / Explain ── -->
+    <!-- ── Action panels: Predict · Sensitivity · Explain ── -->
     <div class="action-panels" id="actionPanels">
 
       <!-- Predict -->
@@ -499,8 +482,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
       <!-- Explain -->
       <div class="panel" style="flex:1.2">
         <h3>PLAIN ENGLISH EXPLANATION</h3>
-        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain (basic)</button>
-        <button class="panel-btn" id="explainAIBtn" onclick="runExplainAI()" style="margin-left:10px;background:var(--neon)">Explain with AI (Gemini)</button>
+        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain this formula</button>
         <div style="margin-top:14px">
           <div class="explain-box" id="explainResult" style="display:none"></div>
         </div>
@@ -527,7 +509,7 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 <script>
 var csv            = null;
 var allCols        = [];
-var parsedData     = null;
+var parsedData     = null;   // PapaParse result
 var lastResults    = null;
 var formulaExpanded = false;
 
@@ -536,6 +518,7 @@ var dz = document.getElementById('dropZone');
 
 // ── Upload via file input ──
 fi.addEventListener('change', function() {
+  console.log('[FF] file input change event fired, files:', fi.files.length);
   if (fi.files && fi.files.length > 0) handleFile(fi.files[0]);
 });
 
@@ -549,8 +532,36 @@ dz.addEventListener('drop', function(e){
 
 function handleFile(f) {
   if (!f) return;
+  console.log('[FF] handleFile called:', f.name, f.size);
   document.getElementById('fn').textContent = '\u2705 ' + f.name;
 
+  // Check if PapaParse loaded
+  if (typeof Papa === 'undefined') {
+    console.warn('[FF] PapaParse not loaded, using fallback reader');
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var text = ev.target.result.replace(/^\xEF\xBB\xBF/, '');
+      var sep = (text.split(';').length > text.split(',').length) ? ';' : ',';
+      var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+      if (lines.length < 2) { document.getElementById('fn').textContent = '\u274C File is empty or has no data rows'; return; }
+      var hdr = lines[0].split(sep).map(function(h){ return h.trim().replace(/^"|"$/g,''); });
+      var rows = [];
+      for (var i = 1; i < lines.length; i++) {
+        var vals = lines[i].split(sep);
+        var obj = {};
+        for (var j = 0; j < hdr.length; j++) obj[hdr[j]] = vals[j] ? vals[j].trim().replace(/^"|"$/g,'') : '';
+        rows.push(obj);
+      }
+      csv = rows;
+      buildColumnSelectors(hdr);
+      showPreview(hdr, rows);
+      console.log('[FF] Fallback parse OK, rows:', rows.length);
+    };
+    reader.readAsText(f);
+    return;
+  }
+
+  // Use PapaParse for robust CSV parsing (handles BOM, quotes, auto-detects separator)
   Papa.parse(f, {
     header: true,
     skipEmptyLines: true,
@@ -561,11 +572,11 @@ function handleFile(f) {
         return;
       }
       parsedData = result;
+      // Rebuild raw CSV string from PapaParse output (always comma-separated, clean)
       csv = Papa.unparse(result.data);
       allCols = result.meta.fields || [];
       showPreview(result);
       parseCols();
-      setTimeout(runDataQualityCheck, 100);
     },
     error: function(err) {
       document.getElementById('fn').textContent = '\u274c Parse error: ' + err.message;
@@ -578,7 +589,7 @@ function showPreview(result) {
   var wrap  = document.getElementById('previewTable');
   var meta  = document.getElementById('previewMeta');
   var cols  = result.meta.fields || [];
-  var rows  = result.data.slice(0, 4);
+  var rows  = result.data.slice(0, 4);  // show first 4 rows
 
   var html  = '<table class="preview-table"><thead><tr>';
   cols.forEach(function(c){ html += '<th>' + escHtml(c) + '</th>'; });
@@ -617,7 +628,7 @@ function parseCols() {
   document.getElementById('colSel').style.display = 'block';
 }
 
-function syncXcols() { setTimeout(runDataQualityCheck, 50);
+function syncXcols() {
   var yc  = document.getElementById('yCol').value;
   var xE  = document.getElementById('xCols');
   var prevSelected = Array.from(xE.selectedOptions).map(function(o){ return o.value; });
@@ -633,7 +644,7 @@ function syncXcols() { setTimeout(runDataQualityCheck, 50);
   updatePreviewLabel();
 }
 
-function updatePreviewLabel() { setTimeout(runDataQualityCheck, 50);
+function updatePreviewLabel() {
   var yc  = document.getElementById('yCol').value;
   var xc  = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
   var el  = document.getElementById('selPreview');
@@ -733,6 +744,7 @@ function showResults(d) {
   if (!(d.quick_results || []).length) {
     cg.innerHTML = '<p style="color:var(--silver);font-size:.85rem">No Quick Search results.</p>';
   }
+  // Build predict inputs
   buildPredictInputs(lastResults._x_cols || [], d.quick_results || []);
 
   (d.quick_results || []).forEach(function(r, i) {
@@ -756,6 +768,7 @@ function copyFormula() {
     btn.textContent = '\u2705 Copied!';
     setTimeout(function(){ btn.textContent = '\u{1F4CB} Copy formula'; }, 1800);
   }).catch(function() {
+    // fallback
     var ta = document.createElement('textarea');
     ta.value = formula; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
     document.body.removeChild(ta);
@@ -781,6 +794,319 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
-// ══════════════════════════════════════════════
-//  DATA QUALITY GATE
-// ══
+// ── Helpers ──
+// ── Build predict input fields after results ──
+function buildPredictInputs(xCols, quick_results) {
+  var grid = document.getElementById('predictInputs');
+  grid.innerHTML = '';
+  xCols.forEach(function(col) {
+    grid.innerHTML +=
+      '<div class="input-row">' +
+      '<label>' + col + '</label>' +
+      '<input type="number" step="any" id="pi_' + col + '" placeholder="enter value">' +
+      '</div>';
+  });
+  document.getElementById('actionPanels').classList.add('visible');
+}
+
+// ── Run prediction ──
+async function runPredict() {
+  var yc  = lastResults._y_col;
+  var xc  = lastResults._x_cols;
+  var inputs = {};
+  var ok = true;
+  xc.forEach(function(col) {
+    var v = document.getElementById('pi_' + col).value;
+    if (v === '' || isNaN(parseFloat(v))) { ok = false; }
+    else inputs[col] = parseFloat(v);
+  });
+  if (!ok) { alert('Please enter all input values.'); return; }
+
+  document.getElementById('predictBtn').disabled = true;
+  document.getElementById('predictBtn').textContent = 'Calculating...';
+  try {
+    var resp = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv: csv, y_col: yc, x_cols: xc, inputs: inputs})
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+
+    // Show prediction
+    var res = document.getElementById('predictResult');
+    res.style.display = 'block';
+    res.textContent = d.prediction.toLocaleString(undefined, {maximumFractionDigits: 4});
+    document.getElementById('predictLabel').textContent = 'Predicted value of ' + yc;
+
+    // Show sensitivity bars
+    var sens = d.sensitivity;
+    var maxAbs = Math.max.apply(null, Object.values(sens).map(Math.abs)) || 1;
+    var html = '';
+    Object.keys(sens).sort(function(a,b){ return Math.abs(sens[b]) - Math.abs(sens[a]); })
+    .forEach(function(k) {
+      var v   = sens[k];
+      var pct = Math.min(100, Math.abs(v) / maxAbs * 100).toFixed(1);
+      var cls = v >= 0 ? 'pos' : 'neg';
+      var sign = v >= 0 ? '+' : '';
+      html += '<div class="sens-row">' +
+        '<span class="sens-name">' + k + '</span>' +
+        '<div class="sens-bar-wrap"><div class="sens-bar ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<span class="sens-val">' + sign + v.toFixed(3) + '</span>' +
+        '</div>';
+    });
+    document.getElementById('sensResult').innerHTML = html;
+
+  } catch(e) { alert('Prediction error: ' + e.message); }
+  finally {
+    document.getElementById('predictBtn').disabled = false;
+    document.getElementById('predictBtn').textContent = 'Calculate';
+  }
+}
+
+// ── Explain formula in plain English ──
+async function runExplain() {
+  if (!lastResults) return;
+  document.getElementById('explainBtn').disabled = true;
+  document.getElementById('explainBtn').textContent = 'Thinking...';
+  try {
+    var resp = await fetch('/api/explain', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        top_terms: lastResults.top_terms || [],
+        formula:   lastResults.adam_formula || '',
+        r2:        lastResults.adam_r2 || null,
+        y_col:     lastResults._y_col || 'Y'
+      })
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+    var box = document.getElementById('explainResult');
+    box.style.display = 'block';
+    box.textContent = d.explanation;
+  } catch(e) { alert('Explain error: ' + e.message); }
+  finally {
+    document.getElementById('explainBtn').disabled = false;
+    document.getElementById('explainBtn').textContent = 'Explain this formula';
+  }
+}
+
+function toggleHow() {
+  var body   = document.getElementById('howBody');
+  var arrow  = document.getElementById('howArrow');
+  var open   = body.style.display === 'block';
+  body.style.display  = open ? 'none' : 'block';
+  arrow.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+function toggleFormula() {
+  var bf  = document.getElementById('bf');
+  var btn = document.getElementById('expandBtn');
+  formulaExpanded = !formulaExpanded;
+  bf.classList.toggle('expanded', formulaExpanded);
+  btn.textContent = formulaExpanded ? '\u25b2 Collapse formula' : '\u25bc Show full formula';
+}
+
+function showValMsg(msg) {
+  var el = document.getElementById('valMsg');
+  el.textContent = '\u26a0\ufe0f ' + msg;
+  el.style.display = 'block';
+}
+function hideValMsg() {
+  document.getElementById('valMsg').style.display = 'none';
+}
+
+// ── Template download panel ──
+var TEMPLATE_DATA = {
+  "bolletta_elettrica.csv": "kwh_consumati,costo_euro\n100,18\n200,36\n350,63\n500,90\n750,135\n1000,180",
+  "consumo_benzina.csv": "km_percorsi,litri_consumati,costo_euro\n100,7,11.2\n250,17.5,28.0\n400,28.0,44.8\n600,42.0,67.2\n800,56.0,89.6\n1000,70.0,112.0",
+  "spesa_supermercato.csv": "num_persone,pasti_settimana,spesa_euro\n1,14,80\n2,14,140\n3,14,190\n4,14,240\n5,14,290\n6,14,340",
+  "rata_mutuo.csv": "importo_euro,anni,rata_mensile_euro\n80000,15,560\n100000,20,550\n150000,20,825\n200000,25,900\n250000,30,1050\n300000,30,1260",
+  "risparmio_mensile.csv": "stipendio_netto,spese_fisse,spese_variabili,risparmio\n1200,600,300,300\n1500,700,350,450\n1800,800,400,600\n2000,900,500,600\n2500,1000,600,900\n3000,1200,700,1100",
+  "stipendio_esperienza.csv": "anni_esperienza,stipendio_euro\n0,1200\n2,1350\n5,1600\n8,1900\n12,2300\n15,2700\n20,3200",
+  "bmi.csv": "peso_kg,altezza_m,bmi\n50,1.60,19.5\n60,1.65,22.0\n70,1.75,22.9\n80,1.70,27.7\n90,1.80,27.8\n100,1.70,34.6\n110,1.75,35.9",
+  "calorie_camminata.csv": "peso_kg,km_percorsi,calorie_bruciate\n60,3,150\n75,3,187\n60,5,250\n70,5,280\n80,7,420\n70,10,560\n90,10,630",
+  "media_voti.csv": "num_materie,somma_voti,media\n5,38,7.6\n6,48,8.0\n8,56,7.0\n7,63,9.0\n4,32,8.0\n9,72,8.0",
+  "studio_vs_voto.csv": "ore_studio_settimana,voto_esame\n2,5.0\n5,6.5\n8,7.5\n12,8.5\n15,9.0\n18,9.5\n20,10.0",
+  "consumo_acqua.csv": "persone_casa,giorni,litri_consumati\n1,30,1500\n2,30,2800\n3,30,4000\n4,30,5100\n5,30,6200\n6,30,7200",
+  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n10,6,1.3\n8,7,1.6\n5,8,2.1\n3,10,2.6\n0,12,3.6\n-2,13,4.2\n-5,15,5.2\n-7,16,5.9\n-10,18,7.0\n-12,19,7.8",
+  "newton.csv": "massa_kg,accelerazione_ms2,forza_N\n1,10,10\n2,10,20\n3,5,15\n5,5,25\n10,10,100\n7,3,21",
+  "energia_cinetica.csv": "massa_kg,velocita_ms,energia_J\n1,2,2\n2,3,9\n1,4,8\n3,2,6\n2,5,25\n4,3,18",
+  "gas_ideale.csv": "pressione_Pa,volume_m3,temperatura_K\n101325,0.0224,273\n202650,0.0112,273\n101325,0.0448,546\n50662,0.0448,273\n303975,0.0075,273",
+  "caduta_libera.csv": "tempo_s,altezza_m\n0,0\n1,4.9\n2,19.6\n3,44.1\n4,78.4\n5,122.5\n6,176.4",
+  "interesse_composto.csv": "capitale,tasso_annuo,anni,valore_finale\n1000,0.05,1,1050\n1000,0.05,2,1102.5\n2000,0.03,3,2185.45\n5000,0.07,5,7012.76\n3000,0.04,4,3509.56",
+  "legge_ohm.csv": "corrente_A,resistenza_ohm,tensione_V\n1,10,10\n2,10,20\n0.5,100,50\n3,5,15\n2,50,100\n0.1,1000,100",
+  "potenza_elettrica.csv": "tensione_V,corrente_A,potenza_W\n230,1,230\n230,2,460\n12,5,60\n5,0.5,2.5\n220,3,660\n9,1,9",
+  "stima_immobiliare.csv": "superficie_mq,distanza_centro_km,piano,prezzo_euro\n50,1,2,200000\n80,2,4,280000\n60,0.5,1,250000\n100,5,3,220000\n120,3,5,350000\n70,1.5,3,260000",
+  "dose_farmaco.csv": "peso_kg,dose_mg\n50,250\n60,300\n70,350\n80,400\n90,450\n100,500\n40,200",
+  "ph_soluzione.csv": "concentrazione_H,pH\n0.1,1.0\n0.01,2.0\n0.001,3.0\n0.0001,4.0\n0.00001,5.0\n1,0.0",
+  "velocita_suono.csv": "temperatura_C,velocita_ms\n0,331\n10,337\n20,343\n30,349\n40,355\n-10,325",
+  "crescita_batterica.csv": "tempo_ore,num_batteri\n0,100\n1,200\n2,400\n3,800\n4,1600\n5,3200\n6,6400",
+};
+
+function updateTplDesc() {
+  var sel = document.getElementById('tplSelect');
+  var opt = sel.options[sel.selectedIndex];
+  var desc = document.getElementById('tplDesc');
+  if (sel.value && opt.dataset.desc) {
+    desc.textContent = 'ℹ️ ' + opt.dataset.desc;
+    desc.style.display = 'block';
+  } else {
+    desc.style.display = 'none';
+  }
+}
+
+function downloadTemplate() {
+  var sel = document.getElementById('tplSelect');
+  var fname = sel.value;
+  if (!fname) { alert('Seleziona prima un template!'); return; }
+  var data = TEMPLATE_DATA[fname];
+  if (!data) { alert('Template non trovato.'); return; }
+  var blob = new Blob([data], {type: 'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>"""
+
+
+def _plain_english(top3, y_col):
+    if not top3: return "No clear pattern found."
+    parts = []
+    for t in top3:
+        dirn = "higher" if t["weight"] > 0 else "lower"
+        parts.append("%s tends to make %s %s" % (t["term"], y_col, dirn))
+    return "; ".join(parts) + "."
+
+
+def create_app():
+    from flask import Flask, request, jsonify, Response
+    app = Flask(__name__)
+    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+
+    @app.route('/')
+    def home():
+        return Response(HTML_PAGE, mimetype='text/html')
+
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'ok', 'version': '4.0'})
+
+    @app.route('/api/find', methods=['POST'])
+    def api_find():
+        try:
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            method = body.get('method', 'both')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula(thr=0.05)
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(8)
+                result['chart_b64']    = make_chart_b64(X_dict, y_data, model)
+            else:
+                result['chart_b64'] = make_chart_b64(X_dict, y_data)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    @app.route('/api/json', methods=['POST'])
+    def api_json():
+        try:
+            body   = request.get_json()
+            X_dict = {k: np.array(v, float) for k, v in body['X'].items()}
+            y_data = np.array(body['y'], float)
+            method = body.get('method', 'quick')
+            result = {'success': True}
+            if method in ('quick', 'both'):
+                result['quick_results'] = quick_search(X_dict, y_data, top_n=8)
+            if method in ('adam', 'both'):
+                model = EMLAdamRegressor(lr=0.05, epochs=1000, l1=5e-4).fit(X_dict, y_data)
+                result['adam_formula'] = model.formula()
+                result['adam_r2']      = round(model.r2(X_dict, y_data), 6)
+                result['top_terms']    = model.top_terms(5)
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+
+    @app.route('/api/predict', methods=['POST'])
+    def api_predict():
+        """Given a fitted formula (adam weights) and input values, return prediction."""
+        try:
+            body   = request.get_json()
+            df     = pd.read_csv(io.StringIO(body['csv']))
+            X_dict = {c: df[c].astype(float).values for c in body['x_cols']}
+            y_data = df[body['y_col']].astype(float).values
+            model  = EMLAdamRegressor(lr=0.05, epochs=1200, l1=5e-4).fit(X_dict, y_data)
+            # predict single point
+            inp    = {k: np.array([float(v)]) for k, v in body['inputs'].items()}
+            pred   = float(model.predict(inp)[0])
+            # sensitivity: partial derivative via finite diff
+            sens = {}
+            for k in body['x_cols']:
+                base = {kk: np.array([float(body['inputs'][kk])]) for kk in body['x_cols']}
+                delta = abs(float(body['inputs'][k])) * 0.01 + 1e-6
+                base_up = dict(base); base_up[k] = np.array([float(body['inputs'][k]) + delta])
+                sens[k] = round(float((model.predict(base_up)[0] - model.predict(base)[0]) / delta), 4)
+            return jsonify({'success': True, 'prediction': round(pred, 4), 'sensitivity': sens})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    @app.route('/api/explain', methods=['POST'])
+    def api_explain():
+        """Natural language explanation of the top terms."""
+        try:
+            body      = request.get_json()
+            terms     = body.get('top_terms', [])
+            formula   = body.get('formula', '')
+            r2        = body.get('r2', None)
+            y_col     = body.get('y_col', 'Y')
+            if not terms:
+                return jsonify({'success': True, 'explanation': 'No significant terms found.'})
+            # Sort by abs weight
+            terms_s = sorted(terms, key=lambda t: abs(t['weight']), reverse=True)
+            total   = sum(abs(t['weight']) for t in terms_s) or 1
+            lines   = []
+            for i, t in enumerate(terms_s[:5]):
+                pct  = round(abs(t['weight']) / total * 100, 1)
+                dirn = 'increases' if t['weight'] > 0 else 'decreases'
+                lines.append("  %d. %s — %s %s by %.4f per unit (%.1f%% of total influence)" % (
+                    i+1, t['term'], t['term'], dirn, abs(t['weight']), pct))
+            r2_str = ("The model explains %.2f%% of the variance in %s." % (r2*100, y_col)) if r2 else ''
+            explanation = (
+                "Formula summary for %s:\n\n" % y_col +
+                r2_str + ("\n\n" if r2_str else "") +
+                "Key drivers (by importance):\n" +
+                "\n".join(lines) +
+                "\n\nIn plain English: " + _plain_english(terms_s[:3], y_col)
+            )
+            return jsonify({'success': True, 'explanation': explanation})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    return app
+
+
+app = create_app()
+
+if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('--port', type=int, default=5000)
+    p.add_argument('--host', default='0.0.0.0')
+    args = p.parse_args()
+    app = create_app()
+    if app:
+        app.run(host=args.host, port=args.port, debug=False)
