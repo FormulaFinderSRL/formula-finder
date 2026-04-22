@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import numpy as np, pandas as pd, base64, io, warnings
+import numpy as np, pandas as pd, base64, io, warnings, os
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────── MATH CORE ───────────────────────────
@@ -301,21 +301,6 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
 .tpl-desc{font-size:.75rem;color:var(--silver);margin-top:8px;padding:6px 10px;background:var(--mid);border-radius:6px;border-left:3px solid var(--teal);display:none}
 .tpl-btn{background:var(--teal);color:var(--bg);border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem;letter-spacing:.5px;transition:.2s;white-space:nowrap}
 .tpl-btn:hover{background:var(--neon)}
-
-/* ── Data Quality Gate ── */
-.dq-panel{display:none;background:var(--card);border:1px solid #1e3a5f;border-radius:14px;padding:22px 28px;margin-bottom:20px}
-.dq-title{font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--white);margin-bottom:16px}
-.dq-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1a2f4a;font-size:.8rem}
-.dq-row:last-child{border-bottom:none}
-.dq-icon{font-size:1rem;min-width:20px;text-align:center}
-.dq-label{color:var(--silver);min-width:130px;font-size:.78rem;letter-spacing:.3px}
-.dq-value{color:var(--white);flex:1;font-size:.78rem}
-.dq-ok{color:#06D6A0}.dq-warn{color:#FCD34D}.dq-err{color:#EF4444}
-.dq-score-bar{height:6px;border-radius:3px;background:#1a2f4a;margin:14px 0 4px;overflow:hidden}
-.dq-score-fill{height:100%;border-radius:3px;transition:width .6s ease}
-.dq-score-label{font-size:.72rem;color:var(--silver);text-align:right}
-.dq-blocker{display:none;background:#2a1018;border:1px solid #EF4444;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#EF4444;line-height:1.6}
-.dq-warning{display:none;background:#1e1a0a;border:1px solid #FCD34D;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:.82rem;color:#FCD34D;line-height:1.6}
 </style>
 </head>
 <body>
@@ -343,6 +328,19 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
         <option value="studio_vs_voto.csv" data-desc="Quanto studio serve per ottenere un buon voto?">&#9201; Studio vs Voto</option>
         <option value="consumo_acqua.csv" data-desc="Litri d&#39;acqua consumati per numero di persone in casa">&#128167; Consumo acqua</option>
         <option value="gas_riscaldamento.csv" data-desc="Consumo di gas in inverno in base alla temperatura esterna">&#127777; Gas riscaldamento</option>
+              <option value="" disabled>── Scienza &amp; Tecnica ──</option>
+        <option value="newton.csv" data-desc="Seconda legge di Newton: F = m × a">&#9881; Fisica — Legge di Newton (F=ma)</option>
+        <option value="energia_cinetica.csv" data-desc="Energia cinetica: E = ½ × m × v²">&#9889; Fisica — Energia cinetica</option>
+        <option value="gas_ideale.csv" data-desc="Gas ideale semplificato: P × V = costante × T">&#127776; Fisica — Gas ideale (PV=nRT)</option>
+        <option value="caduta_libera.csv" data-desc="Caduta libera: h = ½ × g × t²">&#127773; Fisica — Caduta libera</option>
+        <option value="interesse_composto.csv" data-desc="Interesse composto: V = C × (1 + r)^t">&#128176; Finanza — Interesse composto</option>
+        <option value="legge_ohm.csv" data-desc="Legge di Ohm: V = I × R">&#9889; Elettronica — Legge di Ohm</option>
+        <option value="potenza_elettrica.csv" data-desc="Potenza elettrica: P = V × I">&#128268; Elettronica — Potenza elettrica</option>
+        <option value="stima_immobiliare.csv" data-desc="Stima del prezzo immobiliare: regressione multivariabile">&#127968; Immobiliare — Stima prezzo</option>
+        <option value="dose_farmaco.csv" data-desc="Dose del farmaco proporzionale al peso corporeo">&#128138; Medicina — Dose farmaco</option>
+        <option value="ph_soluzione.csv" data-desc="pH di una soluzione: pH = -log[H+]">&#9878; Chimica — pH soluzione</option>
+        <option value="velocita_suono.csv" data-desc="Velocità del suono in aria al variare della temperatura">&#127926; Acustica — Velocità del suono</option>
+        <option value="crescita_batterica.csv" data-desc="Crescita batterica esponenziale: N = N0 × e^(k×t)">&#129440; Biologia — Crescita batterica</option>
       </select>
       <button class="tpl-btn" onclick="downloadTemplate()">&#8681; Scarica template</button>
     </div>
@@ -438,17 +436,6 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
     <button type="button" class="run-btn" id="runBtn" onclick="run()">&#128269; FIND FORMULA</button>
   </div>
 
-
-  <!-- ── Data Quality Gate ── -->
-  <div class="dq-blocker" id="dqBlocker"></div>
-  <div class="dq-warning" id="dqWarning"></div>
-  <div class="dq-panel" id="dqPanel">
-    <div class="dq-title">Data Quality Check</div>
-    <div id="dqRows"></div>
-    <div class="dq-score-bar"><div class="dq-score-fill" id="dqFill"></div></div>
-    <div class="dq-score-label" id="dqScoreLabel"></div>
-  </div>
-
   <div class="spinner" id="spin">Searching&hellip; please wait</div>
   <div class="error-box" id="err" style="display:none"></div>
 
@@ -489,7 +476,8 @@ footer{text-align:center;padding:24px;color:var(--silver);font-size:.78rem;borde
       <!-- Explain -->
       <div class="panel" style="flex:1.2">
         <h3>PLAIN ENGLISH EXPLANATION</h3>
-        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain this formula</button>
+        <button class="panel-btn" id="explainBtn" onclick="runExplain()">Explain (basic)</button>
+        <button class="panel-btn" id="explainAIBtn" onclick="runExplainAI()" style="margin-left:10px;background:var(--neon)">Explain with AI (Gemini)</button>
         <div style="margin-top:14px">
           <div class="explain-box" id="explainResult" style="display:none"></div>
         </div>
@@ -556,7 +544,6 @@ function handleFile(f) {
       allCols = result.meta.fields || [];
       showPreview(result);
       parseCols();
-      setTimeout(runDataQualityCheck, 100);
     },
     error: function(err) {
       document.getElementById('fn').textContent = '\u274c Parse error: ' + err.message;
@@ -608,7 +595,7 @@ function parseCols() {
   document.getElementById('colSel').style.display = 'block';
 }
 
-function syncXcols() { setTimeout(runDataQualityCheck, 50);
+function syncXcols() {
   var yc  = document.getElementById('yCol').value;
   var xE  = document.getElementById('xCols');
   var prevSelected = Array.from(xE.selectedOptions).map(function(o){ return o.value; });
@@ -624,7 +611,7 @@ function syncXcols() { setTimeout(runDataQualityCheck, 50);
   updatePreviewLabel();
 }
 
-function updatePreviewLabel() { setTimeout(runDataQualityCheck, 50);
+function updatePreviewLabel() {
   var yc  = document.getElementById('yCol').value;
   var xc  = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
   var el  = document.getElementById('selPreview');
@@ -774,142 +761,6 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
-
-// ══════════════════════════════════════════════
-//  DATA QUALITY GATE
-// ══════════════════════════════════════════════
-var MIN_ROWS_PER_X = 10; // righe minime per variabile X
-
-function runDataQualityCheck() {
-  var blocker = document.getElementById('dqBlocker');
-  var warning = document.getElementById('dqWarning');
-  var panel   = document.getElementById('dqPanel');
-  var runBtn  = document.getElementById('runBtn');
-
-  blocker.style.display = 'none';
-  warning.style.display = 'none';
-  panel.style.display   = 'none';
-  runBtn.disabled       = false;
-
-  if (!parsedData || !parsedData.data) return;
-
-  var yc   = document.getElementById('yCol').value;
-  var xc   = Array.from(document.getElementById('xCols').selectedOptions).map(function(o){ return o.value; });
-  var rows = parsedData.data;
-  var n    = rows.length;
-  var cols = parsedData.meta.fields || [];
-
-  var checks = [];
-  var score  = 0;
-  var total  = 0;
-  var blockers = [];
-  var warnings = [];
-
-  // CHECK 1 — Volume
-  total++;
-  var minRows = Math.max(10, MIN_ROWS_PER_X * xc.length);
-  if (n >= minRows) {
-    checks.push({icon:'✓', cls:'dq-ok', label:'Data volume', value: n + ' rows — sufficient for ' + xc.length + ' variable(s)'});
-    score++;
-  } else if (n >= Math.floor(minRows * 0.6)) {
-    checks.push({icon:'⚠', cls:'dq-warn', label:'Data volume', value: n + ' rows — recommended minimum is ' + minRows + ' for ' + xc.length + ' variable(s)'});
-    warnings.push('Your dataset has ' + n + ' rows. For ' + xc.length + ' input variable(s) we recommend at least ' + minRows + ' rows for reliable results. You can still run the analysis, but treat the output with caution.');
-    score += 0.5;
-  } else {
-    checks.push({icon:'✗', cls:'dq-err', label:'Data volume', value: n + ' rows — too few. Add at least ' + (minRows - n) + ' more rows'});
-    blockers.push('Not enough data: ' + n + ' rows found, minimum required is ' + minRows + ' for ' + xc.length + ' input variable(s). Please add more rows and try again.');
-  }
-
-  // CHECK 2 — Y variance
-  total++;
-  var yVals = rows.map(function(r){ return parseFloat(r[yc]); }).filter(function(v){ return !isNaN(v); });
-  var yMean = yVals.reduce(function(a,b){return a+b;},0) / yVals.length;
-  var yStd  = Math.sqrt(yVals.reduce(function(a,v){return a+(v-yMean)*(v-yMean);},0) / yVals.length);
-  if (yStd > 1e-6) {
-    checks.push({icon:'✓', cls:'dq-ok', label:'Target Y varies', value: 'Range: ' + Math.min.apply(null,yVals).toFixed(3) + ' → ' + Math.max.apply(null,yVals).toFixed(3)});
-    score++;
-  } else {
-    checks.push({icon:'✗', cls:'dq-err', label:'Target Y varies', value: '"' + yc + '" has the same value in every row — nothing to predict'});
-    blockers.push('Column "' + yc + '" has the same value in every row. A target variable must change across rows — otherwise there is nothing to predict.');
-  }
-
-  // CHECK 3 — X variance (ogni X deve variare)
-  total++;
-  var constCols = [];
-  xc.forEach(function(col) {
-    var vals = rows.map(function(r){ return parseFloat(r[col]); }).filter(function(v){ return !isNaN(v); });
-    var mean = vals.reduce(function(a,b){return a+b;},0)/vals.length;
-    var std  = Math.sqrt(vals.reduce(function(a,v){return a+(v-mean)*(v-mean);},0)/vals.length);
-    if (std < 1e-9) constCols.push(col);
-  });
-  if (constCols.length === 0) {
-    checks.push({icon:'✓', cls:'dq-ok', label:'Input variables', value: 'All ' + xc.length + ' variable(s) have sufficient variation'});
-    score++;
-  } else {
-    checks.push({icon:'✗', cls:'dq-err', label:'Input variables', value: 'Constant column(s): ' + constCols.join(', ') + ' — remove or replace them'});
-    blockers.push('Column(s) ' + constCols.join(', ') + ' have the same value in every row and cannot be used as input variables. Remove them from the X selection.');
-  }
-
-  // CHECK 4 — Valori mancanti / non numerici
-  total++;
-  var badCols = [];
-  xc.concat([yc]).forEach(function(col) {
-    var bad = rows.filter(function(r){ return r[col] === undefined || r[col] === '' || isNaN(parseFloat(r[col])); }).length;
-    if (bad > 0) badCols.push(col + ' (' + bad + ' missing)');
-  });
-  if (badCols.length === 0) {
-    checks.push({icon:'✓', cls:'dq-ok', label:'Missing values', value: 'No missing or non-numeric values detected'});
-    score++;
-  } else {
-    checks.push({icon:'⚠', cls:'dq-warn', label:'Missing values', value: badCols.join(', ')});
-    warnings.push('Some cells contain missing or non-numeric values: ' + badCols.join('; ') + '. These rows will be skipped automatically, which may reduce accuracy.');
-    score += 0.5;
-  }
-
-  // CHECK 5 — Numero ragionevole di X
-  total++;
-  if (xc.length === 0) {
-    checks.push({icon:'✗', cls:'dq-err', label:'Variables selected', value: 'No input variable selected — select at least one X'});
-    blockers.push('Please select at least one input variable (X) before running the analysis.');
-  } else if (xc.length > 5) {
-    checks.push({icon:'⚠', cls:'dq-warn', label:'Variables selected', value: xc.length + ' variables — many inputs may reduce interpretability'});
-    warnings.push('You selected ' + xc.length + ' input variables. With many variables the formula becomes harder to interpret and requires significantly more data. Consider starting with the 2-3 most relevant ones.');
-    score += 0.5; total++;
-  } else {
-    checks.push({icon:'✓', cls:'dq-ok', label:'Variables selected', value: xc.length + ' input variable(s) — good'});
-    score++;
-  }
-
-  // ── Render checks ──
-  var html = '';
-  checks.forEach(function(c) {
-    html += '<div class="dq-row"><span class="dq-icon ' + c.cls + '">' + c.icon + '</span><span class="dq-label">' + c.label + '</span><span class="dq-value ' + c.cls + '">' + c.value + '</span></div>';
-  });
-  document.getElementById('dqRows').innerHTML = html;
-
-  // ── Score bar ──
-  var pct   = Math.round(score / total * 100);
-  var fill  = document.getElementById('dqFill');
-  var label = document.getElementById('dqScoreLabel');
-  fill.style.width = pct + '%';
-  fill.style.background = pct >= 80 ? '#06D6A0' : pct >= 50 ? '#FCD34D' : '#EF4444';
-  label.textContent = 'Quality score: ' + pct + ' / 100';
-  panel.style.display = 'block';
-
-  // ── Blockers ──
-  if (blockers.length > 0) {
-    blocker.innerHTML = '&#9888;&nbsp;<strong>Cannot run analysis</strong><br>' + blockers.join('<br>');
-    blocker.style.display = 'block';
-    runBtn.disabled = true;
-  }
-
-  // ── Warnings ──
-  if (warnings.length > 0 && blockers.length === 0) {
-    warning.innerHTML = '&#9888;&nbsp;<strong>Heads up</strong><br>' + warnings.join('<br>');
-    warning.style.display = 'block';
-  }
-}
-
 // ── Helpers ──
 // ── Build predict input fields after results ──
 function buildPredictInputs(xCols, quick_results) {
@@ -1008,6 +859,36 @@ async function runExplain() {
   }
 }
 
+// ── Explain with Gemini (AI) ──
+async function runExplainAI() {
+  if (!lastResults) return;
+  var btn = document.getElementById('explainAIBtn');
+  btn.disabled = true;
+  btn.textContent = 'Thinking (Gemini)...';
+  try {
+    var resp = await fetch('/api/explain_ai', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        top_terms: lastResults.top_terms || [],
+        formula:   lastResults.adam_formula || '',
+        r2:        lastResults.adam_r2 || null,
+        y_col:     lastResults._y_col || 'Y'
+      })
+    });
+    var d = await resp.json();
+    if (!d.success) throw new Error(d.error);
+    var box = document.getElementById('explainResult');
+    box.style.display = 'block';
+    box.textContent = d.explanation;
+  } catch(e) {
+    alert('Gemini explain error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Explain with AI (Gemini)';
+  }
+}
+
 function toggleHow() {
   var body   = document.getElementById('howBody');
   var arrow  = document.getElementById('howArrow');
@@ -1046,7 +927,19 @@ var TEMPLATE_DATA = {
   "media_voti.csv": "num_materie,somma_voti,media\n5,38,7.6\n6,48,8.0\n8,56,7.0\n7,63,9.0\n4,32,8.0\n9,72,8.0",
   "studio_vs_voto.csv": "ore_studio_settimana,voto_esame\n2,5.0\n5,6.5\n8,7.5\n12,8.5\n15,9.0\n18,9.5\n20,10.0",
   "consumo_acqua.csv": "persone_casa,giorni,litri_consumati\n1,30,1500\n2,30,2800\n3,30,4000\n4,30,5100\n5,30,6200\n6,30,7200",
-  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n5,8,2.5\n2,10,3.8\n0,12,5.0\n-3,14,7.2\n-5,16,9.5\n-8,18,12.0"
+  "gas_riscaldamento.csv": "gradi_esterni,ore_riscaldamento,m3_gas\n5,8,2.5\n2,10,3.8\n0,12,5.0\n-3,14,7.2\n-5,16,9.5\n-8,18,12.0",
+  "newton.csv": "massa_kg,accelerazione_ms2,forza_N\n1,10,10\n2,10,20\n3,5,15\n5,5,25\n10,10,100\n7,3,21",
+  "energia_cinetica.csv": "massa_kg,velocita_ms,energia_J\n1,2,2\n2,3,9\n1,4,8\n3,2,6\n2,5,25\n4,3,18",
+  "gas_ideale.csv": "pressione_Pa,volume_m3,temperatura_K\n101325,0.0224,273\n202650,0.0112,273\n101325,0.0448,546\n50662,0.0448,273\n303975,0.0075,273",
+  "caduta_libera.csv": "tempo_s,altezza_m\n0,0\n1,4.9\n2,19.6\n3,44.1\n4,78.4\n5,122.5\n6,176.4",
+  "interesse_composto.csv": "capitale,tasso_annuo,anni,valore_finale\n1000,0.05,1,1050\n1000,0.05,2,1102.5\n2000,0.03,3,2185.45\n5000,0.07,5,7012.76\n3000,0.04,4,3509.56",
+  "legge_ohm.csv": "corrente_A,resistenza_ohm,tensione_V\n1,10,10\n2,10,20\n0.5,100,50\n3,5,15\n2,50,100\n0.1,1000,100",
+  "potenza_elettrica.csv": "tensione_V,corrente_A,potenza_W\n230,1,230\n230,2,460\n12,5,60\n5,0.5,2.5\n220,3,660\n9,1,9",
+  "stima_immobiliare.csv": "superficie_mq,distanza_centro_km,piano,prezzo_euro\n50,1,2,200000\n80,2,4,280000\n60,0.5,1,250000\n100,5,3,220000\n120,3,5,350000\n70,1.5,3,260000",
+  "dose_farmaco.csv": "peso_kg,dose_mg\n50,250\n60,300\n70,350\n80,400\n90,450\n100,500\n40,200",
+  "ph_soluzione.csv": "concentrazione_H,pH\n0.1,1.0\n0.01,2.0\n0.001,3.0\n0.0001,4.0\n0.00001,5.0\n1,0.0",
+  "velocita_suono.csv": "temperatura_C,velocita_ms\n0,331\n10,337\n20,343\n30,349\n40,355\n-10,325",
+  "crescita_batterica.csv": "tempo_ore,num_batteri\n0,100\n1,200\n2,400\n3,800\n4,1600\n5,3200\n6,6400",
 };
 
 function updateTplDesc() {
@@ -1080,6 +973,53 @@ function downloadTemplate() {
 </html>"""
 
 
+
+
+# ─────────────────────────── GEMINI EXPLAIN ───────────────────────────
+
+def gemini_explain_formula(*, y_col, formula, r2, top_terms):
+    """Return bilingual manager-friendly explanation using Gemini, or None."""
+    api_key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_Key") or "").strip()
+    if not api_key:
+        return None
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        terms = top_terms or []
+        terms_s = sorted(terms, key=lambda t: abs(float(t.get('weight', 0) or 0)), reverse=True)
+        terms_txt = "\n".join([f"- {t.get('term')}: {t.get('weight')}" for t in terms_s[:8]])
+        r2_pct = f"{float(r2)*100:.2f}%" if isinstance(r2, (int, float)) else "n/a"
+
+        prompt = f"""You are explaining a discovered formula to a Customer Support / Operations manager at a fintech.
+They export CSVs from tools like Salesforce and Tableau.
+Be clear, specific, and lightly witty (no sarcasm). Avoid sensitive/discriminatory examples.
+
+Output format (exactly):
+EN:
+<max 140 words>
+
+IT:
+<max 140 parole>
+
+Context:
+- Target (Y): {y_col}
+- R²: {r2_pct}
+- Formula: {formula}
+- Top terms (term: weight):
+{terms_txt}
+
+Include:
+- What it means operationally
+- One likely confounder / hidden driver
+- One concrete next action for a support manager
+"""
+        resp = model.generate_content(prompt)
+        text = (getattr(resp, 'text', '') or '').strip()
+        return text or None
+    except Exception:
+        return None
 def _plain_english(top3, y_col):
     if not top3: return "No clear pattern found."
     parts = []
@@ -1200,6 +1140,27 @@ def create_app():
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 400
 
+
+
+    @app.route('/api/explain_ai', methods=['POST'])
+    def api_explain_ai():
+        try:
+            body    = request.get_json()
+            terms   = body.get('top_terms', [])
+            formula = body.get('formula', '')
+            r2      = body.get('r2', None)
+            y_col   = body.get('y_col', 'Y')
+
+            text = gemini_explain_formula(y_col=y_col, formula=formula, r2=r2, top_terms=terms)
+            if text:
+                return jsonify({'success': True, 'explanation': text})
+
+            return jsonify({
+                'success': False,
+                'error': 'Gemini is not configured. Set GEMINI_API_KEY (or Gemini_API_Key) on the server.'
+            }), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
     return app
 
 
